@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableur Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.0.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/ace.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/mode-javascript.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/mode-python.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/mode-php.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/mode-lua.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/mode-c_cpp.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/theme-twilight.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/theme-dawn.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/ext-language_tools.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fengari-web@0.1.4/dist/fengari-web.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+    {{ content | safe }}
+    <script src="{{ url_for('static', path='script.js') }}"></script>
+    <script src="{{ url_for('static', path='formula.js') }}"></script>
+    <script>
+        // Initialize notification system
+        if (!document.querySelector('.notification-container')) {
+            const container = document.createElement('div');
+            container.className = 'notification-container';
+            document.body.appendChild(container);
+        }
+    </script>
+</body>
+</html>

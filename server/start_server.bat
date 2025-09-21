@@ -1,0 +1,6 @@
+@echo off
+echo Installation des dépendances Python...
+pip install -r requirements.txt
+echo.
+echo Démarrage du serveur Python...
+python main.py
