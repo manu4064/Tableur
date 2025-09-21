@@ -14,6 +14,9 @@
     <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/theme-dawn.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.22.0/src-noconflict/ext-language_tools.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fengari-web@0.1.4/dist/fengari-web.js"></script>
+    <!-- PDF & Capture Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="code-execution.js"></script>
     <script src="custom-functions.js"></script>
     <style>
@@ -776,6 +779,22 @@
             margin-top: 0.5rem;
         }
 
+        body.visualization-active header,
+        body.visualization-active .formula-bar {
+            display: none;
+        }
+
+        body.visualization-active .spreadsheet-container {
+            margin: 0;
+            border-radius: 0;
+            height: 100vh;
+            width: 100vw;
+            max-width: 100vw;
+            max-height: 100vh;
+            padding: 2rem; /* Add some padding for the presentation view */
+            background: #fff;
+        }
+
         @media (max-width: 768px) {
             .cell {
                 width: 80px;
@@ -821,6 +840,7 @@
                     <button id="add-text-btn" title="Ajouter du texte">✏️ Texte</button>
                     <button id="add-chart-btn" title="Ajouter un graphique">📊 Graphique</button>
                     <button id="import-data-btn" title="Importer des données">🌐 Importer</button>
+                    <button id="viz-mode-btn" title="Mode Visualisation">👁️ Visualiser</button>
                 </div>
                 <div class="toolbar-group">
                     <button id="add-rows-btn" title="Ajouter des lignes">⏬ Lignes</button>
@@ -835,6 +855,7 @@
                                 <input type="file" class="file-input" id="excel-input" accept=".xlsx, .xls, .csv">
                             </div>
                             <div class="dropdown-item" id="export-excel">📤 Exporter Excel</div>
+                            <div class="dropdown-item" id="export-pdf">📄 Exporter PDF</div>
                             <div class="dropdown-item" id="save-btn">💾 Sauvegarder</div>
                             <div class="dropdown-item" id="load-btn">📂 Charger</div>
                         </div>
@@ -1645,6 +1666,7 @@ end`,
                 document.getElementById('save-btn').addEventListener('click', saveSpreadsheet);
                 document.getElementById('load-btn').addEventListener('click', loadSpreadsheet);
                 document.getElementById('export-excel').addEventListener('click', exportToExcel);
+                document.getElementById('export-pdf').addEventListener('click', exportToPDF);
                 document.getElementById('import-excel').addEventListener('click', () => document.getElementById('excel-input').click());
                 document.getElementById('excel-input').addEventListener('change', importFromExcel);
                 document.getElementById('history-btn').addEventListener('click', toggleHistoryPanel);
@@ -1655,6 +1677,7 @@ end`,
 
                 // Gestion de l'importation de données
                 document.getElementById('import-data-btn').addEventListener('click', () => openModal('import'));
+                document.getElementById('viz-mode-btn').addEventListener('click', toggleVisualizationMode);
                 document.getElementById('start-import').addEventListener('click', startDataImport);
 
                 // Boutons de l'éditeur de fonctions
@@ -2572,49 +2595,28 @@ end`,
             }
 
             function getChartColors(index, scheme, total, isBorder = false) {
-                const colors = {
+                const opacity = isBorder ? '1' : '0.7';
+                const colorPalettes = {
                     default: [
-                        'rgba(54, 162, 235, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(255, 206, 86, 0.7)',
-                        'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'
+                        `rgba(54, 162, 235, ${opacity})`, `rgba(255, 99, 132, ${opacity})`, `rgba(255, 206, 86, ${opacity})`,
+                        `rgba(75, 192, 192, ${opacity})`, `rgba(153, 102, 255, ${opacity})`, `rgba(255, 159, 64, ${opacity})`
                     ],
                     pastel: [
-                        'rgba(179, 181, 198, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)',
-                        'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)'
+                        `rgba(166, 206, 227, ${opacity})`, `rgba(31, 120, 180, ${opacity})`, `rgba(178, 223, 138, ${opacity})`,
+                        `rgba(51, 160, 44, ${opacity})`, `rgba(251, 154, 153, ${opacity})`, `rgba(227, 26, 28, ${opacity})`
                     ],
                     vibrant: [
-                        'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)',
-                        'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'
+                        `rgba(228, 26, 28, ${opacity})`, `rgba(55, 126, 184, ${opacity})`, `rgba(77, 175, 74, ${opacity})`,
+                        `rgba(152, 78, 163, ${opacity})`, `rgba(255, 127, 0, ${opacity})`, `rgba(255, 255, 51, ${opacity})`
                     ],
                     monochrome: [
-                        'rgba(0, 0, 0, 0.7)', 'rgba(50, 50, 50, 0.7)', 'rgba(100, 100, 100, 0.7)',
-                        'rgba(150, 150, 150, 0.7)', 'rgba(200, 200, 200, 0.7)', 'rgba(220, 220, 220, 0.7)'
+                        `rgba(0, 0, 0, ${opacity})`, `rgba(34, 34, 34, ${opacity})`, `rgba(68, 68, 68, ${opacity})`,
+                        `rgba(102, 102, 102, ${opacity})`, `rgba(136, 136, 136, ${opacity})`, `rgba(170, 170, 170, ${opacity})`
                     ]
                 };
 
-                const borderColors = {
-                    default: [
-                        'rgba(54, 162, 235, 1)', 'rgba(255, 99, 132, 1)', 'rgba(255, 206, 86, 1)',
-                        'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)'
-                    ],
-                    pastel: [
-                        'rgba(179, 181, 198, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)',
-                        'rgba(255, 206, 86, 1)', 'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)'
-                    ],
-                    vibrant: [
-                        'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)',
-                        'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)'
-                    ],
-                    monochrome: [
-                        'rgba(0, 0, 0, 1)', 'rgba(50, 50, 50, 1)', 'rgba(100, 100, 100, 1)',
-                        'rgba(150, 150, 150, 1)', 'rgba(200, 200, 200, 1)', 'rgba(220, 220, 220, 1)'
-                    ]
-                };
-
-                if (isBorder) {
-                    return borderColors[scheme][index % total] || borderColors.default[0];
-                } else {
-                    return colors[scheme][index % total] || colors.default[0];
-                }
+                const selectedPalette = colorPalettes[scheme] || colorPalettes.default;
+                return selectedPalette[index % selectedPalette.length];
             }
 
             function makeDraggable(element) {
@@ -3970,6 +3972,18 @@ function NOUVELLE_FONCTION(...args) {
                 return /^[A-Z]+[0-9]+$/.test(range);
             }
 
+            function toggleVisualizationMode() {
+                const isActive = document.body.classList.toggle('visualization-active');
+                const btn = document.getElementById('viz-mode-btn');
+                if (isActive) {
+                    btn.innerHTML = '🚪 Quitter';
+                    btn.title = 'Quitter le mode Visualisation';
+                } else {
+                    btn.innerHTML = '👁️ Visualiser';
+                    btn.title = 'Mode Visualisation';
+                }
+            }
+
             function importFromExcel(e) {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -4023,6 +4037,73 @@ function NOUVELLE_FONCTION(...args) {
                 reader.readAsArrayBuffer(file);
             }
 
+
+            function exportToPDF() {
+                const { jsPDF } = window.jspdf;
+                const spreadsheetContainer = document.querySelector('.spreadsheet-container');
+
+                // Temporarily remove selection before capture
+                if (currentCell) {
+                    currentCell.classList.remove('selected');
+                }
+
+                console.log('Génération du PDF...');
+                alert('La génération du PDF a commencé. Cela peut prendre quelques instants...');
+
+                html2canvas(spreadsheetContainer, {
+                    scale: 2, // Augmenter la résolution pour une meilleure qualité
+                    useCORS: true, // Pour les images externes si nécessaire
+                    logging: true
+                }).then(canvas => {
+                    // Rétablir la sélection
+                    if (currentCell) {
+                        currentCell.classList.add('selected');
+                    }
+
+                    const imgData = canvas.toDataURL('image/png');
+
+                    // Dimensions du PDF (A4 en mode paysage)
+                    const pdf = new jsPDF({
+                        orientation: 'landscape',
+                        unit: 'pt',
+                        format: 'a4'
+                    });
+
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                    // Conserver le ratio de l'image
+                    const imgProps = pdf.getImageProperties(imgData);
+                    const imgWidth = pdfWidth;
+                    const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+
+                    let heightLeft = imgHeight;
+                    let position = 0;
+
+                    // Ajouter l'image
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pdfHeight;
+
+                    // Gérer plusieurs pages si l'image est trop haute
+                    while (heightLeft >= 0) {
+                        position = heightLeft - imgHeight;
+                        pdf.addPage();
+                        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                        heightLeft -= pdfHeight;
+                    }
+
+                    pdf.save('tableur-export.pdf');
+                    console.log('PDF généré avec succès.');
+
+                }).catch(err => {
+                    // Rétablir la sélection en cas d'erreur
+                    if (currentCell) {
+                        currentCell.classList.add('selected');
+                    }
+                    console.error('Erreur lors de la génération du PDF:', err);
+                    alert('Une erreur est survenue lors de la génération du PDF.');
+                });
+            }
 
             // Fonctions standard pour référence
             const standardFunctions = [

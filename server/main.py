@@ -110,7 +110,7 @@ async def execute_code(request: CodeExecutionRequest):
         logger.error(f"{error_message}\n{traceback.format_exc()}")
         # Return a 200 OK with the error in the response body,
         # as this is an execution error, not a server error.
-        return CodeExecutionResponse(result=None, error=str(e))
+        return CodeExecutionResponse(result=None, error=f"{type(e).__name__}: {e}")
 
 
 @app.post("/api/spreadsheet/save")
