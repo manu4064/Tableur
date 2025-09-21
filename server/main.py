@@ -1,259 +1,198 @@
-from fastapi import FastAPI, HTTPException, Security, Request, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Any, Dict, Optional
-from pathlib import Path
-import numpy as np
-import pandas as pd
-import asyncio
-import logging
 from sqlalchemy.orm import Session
-from database import get_db, create_spreadsheet, get_spreadsheet, update_cell, save_custom_function
-from database import get_custom_functions, save_user_preferences, get_user_preferences
-from contextlib import contextmanager
+import logging
 import sys
-import io
-import json
 import traceback
 from datetime import datetime
-from code_executor import CodeExecutor, Language
 
-# Configuration du logging
+# Import simplified database functions and models
+from database import (
+    get_db,
+    save_spreadsheet,
+    load_spreadsheet,
+    save_custom_function,
+    list_custom_functions,
+    delete_custom_function,
+    create_db_and_tables,
+)
+from code_executor import CodeExecutor, Language
+from pydantic import BaseModel as PydanticBaseModel
+
+class CodeExecutionResponse(PydanticBaseModel):
+    result: Any
+    error: Optional[str] = None
+    execution_time: float = 0.0
+    memory_usage: Optional[str] = None
+
+# --- Logging Setup ---
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('python_engine.log'),
+        logging.FileHandler('server.log'),
         logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Python Execution Engine")
+# --- FastAPI App Initialization ---
+app = FastAPI(title="Tableur Pro Backend")
 
-# Mount static files directory
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Configure templates
-templates = Jinja2Templates(directory="templates")
-
-# Configuration CORS
+# Add CORS middleware to allow all origins (for development)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En production, spécifiez les domaines autorisés
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# --- Pydantic Models for API Requests/Responses ---
+
 class CodeExecutionRequest(BaseModel):
     code: str
     args: List[Any]
     language: Language
-    timeout: int = 5  # Timeout par défaut de 5 secondes
 
-class SpreadsheetData(BaseModel):
-    cells: Dict[str, Dict[str, Any]]
+class SpreadsheetSaveRequest(BaseModel):
+    name: str = "default"  # Allow naming spreadsheets, default to one
+    data: Dict[str, Any]
 
-class CustomFunctionData(BaseModel):
+class CustomFunctionSchema(BaseModel):
     name: str
-    code: str
-    language: str
     description: Optional[str] = None
+    language: str
+    code: str
 
-class UserPreferencesData(BaseModel):
-    theme: Optional[str] = None
-    editor_theme: Optional[str] = None
-    auto_recalculate: Optional[bool] = None
-    default_language: Optional[str] = None
-
-class CodeExecutionResponse(BaseModel):
-    result: Any
-    error: str = None
-    execution_time: float
-    memory_usage: str
-
-@contextmanager
-def capture_output():
-    """Capture la sortie standard et les erreurs"""
-    new_out, new_err = io.StringIO(), io.StringIO()
-    old_out, old_err = sys.stdout, sys.stderr
-    try:
-        sys.stdout, sys.stderr = new_out, new_err
-        yield sys.stdout, sys.stderr
-    finally:
-        sys.stdout, sys.stderr = old_out, old_err
-
+# --- Global Instances ---
 executor = CodeExecutor()
 
-# Helper functions for coordinates conversion
-def coords_to_row_col(coords: str) -> tuple[int, int]:
-    import re
-    match = re.match(r'([A-Z]+)(\d+)', coords)
-    if not match:
-        raise ValueError(f"Invalid coordinates: {coords}")
-    
-    col = 0
-    for char in match.group(1):
-        col = col * 26 + (ord(char) - ord('A') + 1)
-    
-    return int(match.group(2)), col
+# --- FastAPI Events ---
 
-def row_col_to_coords(row: int, col: int) -> str:
-    col_str = ''
-    while col > 0:
-        col -= 1
-        col_str = chr(ord('A') + (col % 26)) + col_str
-        col //= 26
-    return f"{col_str}{row}"
+@app.on_event("startup")
+def on_startup():
+    """Create database tables on application startup."""
+    logger.info("Application starting up...")
+    create_db_and_tables()
+    logger.info("Database tables created or already exist.")
 
-async def execute_code_safe(code: str, args: List[Any], language: Language) -> Any:
-    """Exécute le code dans le langage spécifié de manière sécurisée"""
-    try:
-        if language == Language.PYTHON:
-            return await executor.execute_python(code, args)
-        elif language == Language.JAVASCRIPT:
-            return await executor.execute_javascript(code, args)
-        elif language == Language.LUA:
-            return await executor.execute_lua(code, args)
-        elif language == Language.PHP:
-            return await executor.execute_php(code, args)
-        elif language == Language.C:
-            return await executor.execute_c(code, args)
-        else:
-            raise ValueError(f"Langage non supporté: {language}")
-    except Exception as e:
-        logger.error(f"Erreur d'exécution ({language}): {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+# --- API Endpoints ---
 
-@app.get("/tableur", response_class=HTMLResponse)
-async def get_tableur(request: Request):
-    # Read the content between body tags from index.html
-    index_path = Path("../index.html")
-    if index_path.exists():
-        content = index_path.read_text(encoding='utf-8')
-        # Extract content between <body> and </body>
-        body_content = content.split('<body>')[1].split('</body>')[0]
-    else:
-        body_content = "<div>Error: index.html not found</div>"
-    
-    return templates.TemplateResponse("tableur.html", {
-        "request": request,
-        "content": body_content
-    })
+@app.get("/")
+def read_root():
+    return {"message": "Tableur Pro Backend is running."}
 
 @app.post("/execute", response_model=CodeExecutionResponse)
 async def execute_code(request: CodeExecutionRequest):
-    """Point d'entrée pour l'exécution du code dans différents langages"""
+    """
+    Executes code in a specified language using the sandboxed executor.
+    """
     start_time = datetime.now()
-    result = None
-    error = None
-    
+    logger.info(f"Executing code in {request.language.value}...")
     try:
-        # Capture la sortie et les erreurs
-        with capture_output() as (out, err):
-            # Exécute le code avec un timeout
-            result = await asyncio.wait_for(
-                execute_code_safe(request.code, request.args, request.language),
-                timeout=request.timeout
-            )
-        
-        # Récupère les sorties capturées
-        stdout = out.getvalue()
-        stderr = err.getvalue()
-        
-        if stderr:
-            error = stderr
-        
-    except asyncio.TimeoutError:
-        error = "L'exécution a dépassé le délai imparti"
-        logger.error(error)
+        result = await executor.execute(
+            language=request.language,
+            code=request.code,
+            args=request.args
+        )
+        execution_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"Execution successful in {request.language.value}. Result: {result}")
+        return CodeExecutionResponse(
+            result=result,
+            execution_time=round(execution_time, 4)
+        )
     except Exception as e:
-        error = f"Erreur: {str(e)}\n{traceback.format_exc()}"
-        logger.error(error)
-    
-    execution_time = (datetime.now() - start_time).total_seconds()
-    memory_usage = "N/A"  # En production, utilisez psutil pour des mesures précises
-    
-    return CodeExecutionResponse(
-        result=result,
-        error=error,
-        execution_time=execution_time,
-        memory_usage=memory_usage
-    )
+        error_message = f"Failed to execute code: {e}"
+        logger.error(f"{error_message}\n{traceback.format_exc()}")
+        # Return a 200 OK with the error in the response body,
+        # as this is an execution error, not a server error.
+        return CodeExecutionResponse(result=None, error=str(e))
+
 
 @app.post("/api/spreadsheet/save")
-async def save_spreadsheet_data(data: SpreadsheetData, db: Session = Depends(get_db)):
-    spreadsheet = get_spreadsheet(db, 1)  # Using default spreadsheet ID 1
-    if not spreadsheet:
-        spreadsheet = create_spreadsheet(db)
-    
-    for coords, cell_data in data.cells.items():
-        row, col = coords_to_row_col(coords)
-        update_cell(
-            db,
-            spreadsheet.id,
-            row,
-            col,
-            cell_data["value"],
-            cell_data.get("formula"),
-            cell_data.get("style")
-        )
-    
-    return {"status": "success"}
+async def save_spreadsheet_endpoint(request: SpreadsheetSaveRequest, db: Session = Depends(get_db)):
+    """
+    Saves the entire state of a spreadsheet as a JSON object.
+    """
+    try:
+        logger.info(f"Saving spreadsheet '{request.name}'...")
+        save_spreadsheet(db, name=request.name, data=request.data)
+        logger.info(f"Spreadsheet '{request.name}' saved successfully.")
+        return {"status": "success", "name": request.name}
+    except Exception as e:
+        logger.error(f"Failed to save spreadsheet '{request.name}': {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Failed to save spreadsheet data.")
 
-@app.get("/api/spreadsheet/load")
-async def load_spreadsheet_data(db: Session = Depends(get_db)):
-    spreadsheet = get_spreadsheet(db, 1)  # Using default spreadsheet ID 1
+@app.get("/api/spreadsheet/load/{name}")
+async def load_spreadsheet_endpoint(name: str, db: Session = Depends(get_db)):
+    """
+    Loads the state of a spreadsheet from the database.
+    """
+    logger.info(f"Loading spreadsheet '{name}'...")
+    spreadsheet = load_spreadsheet(db, name)
     if not spreadsheet:
-        spreadsheet = create_spreadsheet(db)
-    
-    cells = {}
-    for cell in spreadsheet.cells:
-        coords = row_col_to_coords(cell.row, cell.col)
-        cells[coords] = {
-            "value": cell.value,
-            "formula": cell.formula,
-            "style": cell.style
-        }
-    
-    return {"cells": cells}
+        logger.warning(f"Spreadsheet '{name}' not found.")
+        raise HTTPException(status_code=404, detail="Spreadsheet not found")
+
+    logger.info(f"Spreadsheet '{name}' loaded successfully.")
+    return JSONResponse(content=spreadsheet.data)
 
 @app.post("/api/functions/save")
-async def save_function(function: CustomFunctionData, db: Session = Depends(get_db)):
-    saved_function = save_custom_function(
-        db,
-        1,  # Default spreadsheet ID
-        function.name,
-        function.code,
-        function.language,
-        function.description
-    )
-    return {"status": "success", "id": saved_function.id}
+async def save_function_endpoint(func_data: CustomFunctionSchema, db: Session = Depends(get_db)):
+    """
+    Saves or updates a global custom function.
+    """
+    try:
+        logger.info(f"Saving function '{func_data.name}'...")
+        save_custom_function(
+            db,
+            name=func_data.name,
+            description=func_data.description,
+            language=func_data.language,
+            code=func_data.code
+        )
+        logger.info(f"Function '{func_data.name}' saved successfully.")
+        return {"status": "success", "name": func_data.name}
+    except Exception as e:
+        logger.error(f"Failed to save function '{func_data.name}': {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Failed to save function.")
 
-@app.get("/api/functions/list")
-async def list_functions(db: Session = Depends(get_db)):
-    functions = get_custom_functions(db, 1)  # Default spreadsheet ID
-    return {f.name: {"code": f.code, "language": f.language} for f in functions}
+@app.get("/api/functions/list", response_model=List[CustomFunctionSchema])
+async def list_functions_endpoint(db: Session = Depends(get_db)):
+    """
+    Lists all available global custom functions.
+    """
+    logger.info("Fetching list of custom functions...")
+    functions = list_custom_functions(db)
+    # Manually construct the response to fit the Pydantic model
+    return [
+        CustomFunctionSchema(
+            name=f.name,
+            description=f.description,
+            language=f.language,
+            code=f.code
+        ) for f in functions
+    ]
 
-@app.post("/api/preferences/save")
-async def save_preferences(preferences: UserPreferencesData, db: Session = Depends(get_db)):
-    saved_prefs = save_user_preferences(db, preferences.dict(exclude_unset=True))
-    return {"status": "success"}
+@app.delete("/api/functions/delete/{name}")
+async def delete_function_endpoint(name: str, db: Session = Depends(get_db)):
+    """
+    Deletes a global custom function by name.
+    """
+    logger.info(f"Deleting function '{name}'...")
+    success = delete_custom_function(db, name)
+    if not success:
+        logger.warning(f"Attempted to delete non-existent function '{name}'.")
+        raise HTTPException(status_code=404, detail="Function not found")
 
-@app.get("/api/preferences/load")
-async def load_preferences(db: Session = Depends(get_db)):
-    prefs = get_user_preferences(db)
-    return {
-        "theme": prefs.theme,
-        "editor_theme": prefs.editor_theme,
-        "auto_recalculate": bool(prefs.auto_recalculate),
-        "default_language": prefs.default_language
-    }
+    logger.info(f"Function '{name}' deleted successfully.")
+    return {"status": "success", "name": name}
 
 if __name__ == "__main__":
     import uvicorn
+    # To run: uvicorn server.main:app --reload
     uvicorn.run(app, host="0.0.0.0", port=8000)

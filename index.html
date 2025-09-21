@@ -920,7 +920,6 @@
                             <select id="function-language">
                                 <option value="javascript">JavaScript</option>
                                 <option value="python">Python</option>
-                                <option value="php">PHP</option>
                                 <option value="lua">Lua</option>
                                 <option value="c">C</option>
                             </select>
@@ -1396,7 +1395,7 @@
                 }
 
                 const data = await response.json();
-                
+
                 // Gestion des erreurs retournées par le serveur
                 if (data.error) {
                     console.error(`Erreur ${language}:`, data.error);
@@ -1414,145 +1413,8 @@
             }
         }
 
-        // Fonctions spécifiques pour chaque langage
-        async function executePythonCode(code, args) {
-            return executeCode(code, args, 'python');
-        }
 
-        async function executeJavaScriptCode(code, args) {
-            return executeCode(code, args, 'javascript');
-        }
 
-        async function executeLuaCode(code, args) {
-            return executeCode(code, args, 'lua');
-        }
-
-        async function executePhpCode(code, args) {
-            return executeCode(code, args, 'php');
-        }
-
-        async function executeCCode(code, args) {
-            return executeCode(code, args, 'c');
-        }
-
-        // Fonction pour exécuter du code Lua
-        function executeLuaCode(code, args) {
-            try {
-                if (!window.fengari) {
-                    if (typeof fengari === 'undefined') {
-                        throw new Error('Fengari n\'est pas chargé');
-                    }
-                    window.fengari = fengari;
-                }
-
-                const luaState = window.fengari.lauxlib.luaL_newstate();
-                window.fengari.lualib.luaL_openlibs(luaState);
-
-                // Préparer le code Lua
-                const luaCode = `
-                    function NOUVELLE_FONCTION(...)
-                        ${code}
-                    end
-                `;
-
-                // Charger et exécuter le code
-                window.fengari.lauxlib.luaL_loadstring(luaState, window.fengari.to_luastring(luaCode));
-                window.fengari.lua.lua_pcall(luaState, 0, 0, 0);
-
-                // Obtenir la fonction
-                window.fengari.lua.lua_getglobal(luaState, window.fengari.to_luastring("NOUVELLE_FONCTION"));
-
-                // Pousser les arguments
-                args.forEach(arg => {
-                    if (typeof arg === 'number') {
-                        window.fengari.lua.lua_pushnumber(luaState, arg);
-                    } else {
-                        window.fengari.lua.lua_pushstring(luaState, window.fengari.to_luastring(String(arg)));
-                    }
-                });
-
-                // Appeler la fonction
-                if (window.fengari.lua.lua_pcall(luaState, args.length, 1, 0) !== 0) {
-                    throw new Error(window.fengari.lua.lua_tostring(luaState, -1));
-                }
-
-                // Récupérer le résultat
-                const result = window.fengari.lua.lua_tonumber(luaState, -1);
-                window.fengari.lua.lua_close(luaState);
-
-                return result || 0;
-            } catch (e) {
-                console.error('Erreur Lua:', e);
-                return 'ERREUR';
-            }
-        }
-
-        // Fonction pour compiler et exécuter du code C via WebAssembly
-        async function executeCCode(code, args) {
-            try {
-                // Ajouter les en-têtes et wrappers nécessaires
-                const fullCode = `
-                    #include <emscripten.h>
-                    #include <math.h>
-                    
-                    EMSCRIPTEN_KEEPALIVE
-                    double NOUVELLE_FONCTION(double* args, int argc) {
-                        ${code}
-                    }
-                `;
-
-                if (!window.wasmInstance) {
-                    console.error('WebAssembly non initialisé');
-                    return 'ERREUR';
-                }
-
-                // Convertir les arguments en tableau de nombres
-                const typedArgs = args.map(Number);
-                const result = window.wasmInstance.exports.NOUVELLE_FONCTION(typedArgs, typedArgs.length);
-                return isFinite(result) ? result : 'ERREUR';
-            } catch (e) {
-                console.error('Erreur C/WebAssembly:', e);
-                return 'ERREUR';
-            }
-        }
-
-        // Fonction pour exécuter du code PHP via un serveur
-        async function executePHPCode(code, args) {
-            try {
-                // Préparer le code PHP avec la fonction wrappée
-                const wrappedCode = `
-                    function NOUVELLE_FONCTION(...$args) {
-                        ${code}
-                    }
-                    return NOUVELLE_FONCTION(...$jsonArgs);
-                `;
-
-                const response = await fetch('/execute-php.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        code: wrappedCode,
-                        args: args
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Erreur serveur PHP');
-                }
-
-                const result = await response.json();
-                if (result.error) {
-                    throw new Error(result.error);
-                }
-
-                return result.value;
-            } catch (e) {
-                console.error('Erreur PHP:', e);
-                return 'ERREUR';
-            }
-        }
 
         document.addEventListener('DOMContentLoaded', function() {
             // Variables globales
@@ -1581,29 +1443,16 @@
             window.pyodide = null;
             window.fengari = null;
 
-            // Structure d'un importateur :
-            // {
-            //     id: string,              // Identifiant unique
-            //     name: string,            // Nom donné par l'utilisateur
-            //     url: string,             // URL source
-            //     range: string,           // Cellule de départ
-            //     type: 'fixed' | 'incremental', // Type d'import
-            //     interval: number,        // Intervalle en ms
-            //     intervalId: number,      // ID du setInterval
-            //     lastUpdate: Date,        // Dernière mise à jour
-            //     status: 'active' | 'paused', // État de l'import
-            //     lastValue: any,          // Dernière valeur importée
-            //     error: string | null     // Dernière erreur
-            // }
-
             // Initialisation du tableur
             initSpreadsheet();
-            initExampleData();
             setupEventListeners();
             initFunctionEditor();
 
-            // Charger les fonctions personnalisées depuis localStorage
-            loadCustomFunctions();
+            // Charger les données depuis la base de données au démarrage
+            loadSpreadsheet().then(() => {
+                loadCustomFunctions();
+            });
+
 
             function initSpreadsheet() {
                 const thead = spreadsheet.querySelector('thead tr');
@@ -1756,7 +1605,7 @@ end`,
     return args[0];
 }`
                     };
-                    if (functionEditor.getValue().trim() === "" || 
+                    if (functionEditor.getValue().trim() === "" ||
                         functionEditor.getValue().includes("// Votre code ici") ||
                         functionEditor.getValue().includes("# Votre code ici") ||
                         functionEditor.getValue().includes("-- Votre code ici")) {
@@ -1814,7 +1663,7 @@ end`,
                     saveCustomFunction().catch(e => {
                         console.error('Erreur lors de la sauvegarde:', e);
                         document.getElementById('function-error').classList.add('visible');
-                        document.getElementById('function-error').textContent = 
+                        document.getElementById('function-error').textContent =
                             `Erreur : ${e.message}`;
                     });
                 });
@@ -1826,7 +1675,7 @@ end`,
                     document.getElementById('packages-container').style.display = 'block';
                     listInstalledPythonPackages().then(packages => {
                         const packageList = document.getElementById('package-list');
-                        packageList.innerHTML = packages.length ? packages.map(pkg => 
+                        packageList.innerHTML = packages.length ? packages.map(pkg =>
                             `<div class="package-item">${pkg}</div>`
                         ).join('') : 'Aucun package installé';
                     });
@@ -1853,7 +1702,7 @@ end`,
                             // Mettre à jour la liste des packages
                             const packages = await listInstalledPythonPackages();
                             const packageList = document.getElementById('package-list');
-                            packageList.innerHTML = packages.map(pkg => 
+                            packageList.innerHTML = packages.map(pkg =>
                                 `<div class="package-item">${pkg}</div>`
                             ).join('');
                         } else {
@@ -2277,15 +2126,15 @@ end`,
                 try {
                     // Évaluer la formule en créant une nouvelle fonction avec les fonctions dans le scope
                     return new Function(
-                        'sum', 'avg', 'max', 'min', 'pow', 'sqrt', 'round', 
-                        'abs', 'exp', 'log', 'log10', 'sin', 'cos', 'tan', 
+                        'sum', 'avg', 'max', 'min', 'pow', 'sqrt', 'round',
+                        'abs', 'exp', 'log', 'log10', 'sin', 'cos', 'tan',
                         'PI', 'random', 'concat', 'left', 'right', 'length',
                         'getCellValue', 'getRangeSum',
                         ...Object.keys(customFunctions).map(f => `${f}_custom`),
                         `return ${modifiedFormula}`
                     )(
-                        sum, avg, max, min, pow, sqrt, round, 
-                        abs, exp, log, log10, sin, cos, tan, 
+                        sum, avg, max, min, pow, sqrt, round,
+                        abs, exp, log, log10, sin, cos, tan,
                         PI, random, concat, left, right, length,
                         getCellValue, getRangeSum,
                         ...Object.keys(customFunctions).map(f => window[`${f}_custom`])
@@ -2482,144 +2331,145 @@ end`,
                 currentEditingElement = null;
             }
 
-            function addTextElement() {
-                const content = document.getElementById('text-content').value;
-                const color = document.querySelector('#text-color-picker .color-option.selected')?.dataset.color ||
-                              document.getElementById('custom-color').value;
-                const bgColor = document.querySelector('#text-bg-color-picker .color-option.selected')?.dataset.color ||
-                               'white';
+            function addTextElement(data = null, fromLoad = false) {
+                let elementData;
 
-                if (content.trim()) {
-                    const textElement = document.createElement('div');
-                    textElement.className = 'text-element';
-                    textElement.style.color = color;
-                    textElement.style.backgroundColor = bgColor;
-                    textElement.style.left = '100px';
-                    textElement.style.top = '100px';
+                if (fromLoad) {
+                    elementData = {
+                        id: data.id || `text_${Date.now()}`,
+                        content: data.content,
+                        color: data.style.color,
+                        bgColor: data.style.backgroundColor,
+                        left: data.style.left,
+                        top: data.style.top,
+                        width: data.style.width,
+                        height: data.style.height,
+                        zIndex: data.style.zIndex
+                    };
+                } else {
+                    const content = document.getElementById('text-content').value;
+                    if (!content.trim()) return;
+                    elementData = {
+                        id: `text_${Date.now()}`,
+                        content: content,
+                        color: document.querySelector('#text-color-picker .color-option.selected')?.dataset.color || '#333',
+                        bgColor: document.querySelector('#text-bg-color-picker .color-option.selected')?.dataset.color || 'white',
+                        left: '100px',
+                        top: '100px',
+                        width: '200px',
+                        height: '100px',
+                        zIndex: 100
+                    };
+                }
 
-                    // Créer un conteneur pour le texte
-                    const textContainer = document.createElement('div');
-                    textContainer.className = 'text-content';
-                    textContainer.textContent = content;
-                    textElement.appendChild(textContainer);
+                const textElement = document.createElement('div');
+                textElement.className = 'text-element';
+                textElement.id = elementData.id;
+                textElement.style.color = elementData.color;
+                textElement.style.backgroundColor = elementData.bgColor;
+                textElement.style.left = elementData.left;
+                textElement.style.top = elementData.top;
+                textElement.style.width = elementData.width;
+                textElement.style.height = elementData.height;
+                textElement.style.zIndex = elementData.zIndex;
 
-                    const editBtn = document.createElement('button');
-                    editBtn.className = 'edit-btn';
-                    editBtn.textContent = '✏️';
-                    editBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        openModal('text', textElement);
-                    });
+                const textContainer = document.createElement('div');
+                textContainer.className = 'text-content';
+                textContainer.textContent = elementData.content;
+                textElement.appendChild(textContainer);
 
-                    // Stocker les informations de style
-                    textElement.dataset.textColor = color;
-                    textElement.dataset.bgColor = bgColor;
+                const editBtn = document.createElement('button');
+                editBtn.className = 'edit-btn';
+                editBtn.textContent = '✏️';
+                editBtn.onclick = (e) => { e.stopPropagation(); openModal('text', textElement); };
+                textElement.appendChild(editBtn);
 
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.className = 'delete-btn';
-                    deleteBtn.textContent = '✕';
-                    deleteBtn.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        textElement.remove();
-                        elements = elements.filter(el => el !== textElement);
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = '✕';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    textElement.remove();
+                    // L'historique n'est pas géré ici pour la suppression, pour garder la simplicité
+                };
+                textElement.appendChild(deleteBtn);
 
-                        saveToHistory({
-                            type: 'remove_text_element',
-                            element: {
-                                content: content,
-                                color: color,
-                                bgColor: bgColor,
-                                left: textElement.style.left,
-                                top: textElement.style.top
-                            }
-                        });
-                    });
+                document.querySelector('.spreadsheet-container').appendChild(textElement);
+                makeDraggable(textElement);
 
-                    textElement.appendChild(editBtn);
-                    textElement.appendChild(deleteBtn);
-                    document.querySelector('.spreadsheet-container').appendChild(textElement);
-
-                    makeDraggable(textElement);
-                    elements.push(textElement);
-
-                    saveToHistory({
-                        type: 'add_text_element',
-                        element: {
-                            content: content,
-                            color: color,
-                            bgColor: bgColor,
-                            left: textElement.style.left,
-                            top: textElement.style.top
-                        }
-                    });
-
+                if (!fromLoad) {
                     document.getElementById('element-modal').classList.remove('active');
+                    // L'historique pour l'ajout n'est pas géré pour garder la simplicité
                 }
             }
 
-            function addChartElement() {
-                const chartType = document.getElementById('chart-type').value;
-                const title = document.getElementById('chart-title').value;
-                const dataRange = document.getElementById('chart-data-range').value;
-                const showLabels = document.getElementById('chart-show-labels').checked;
-                const colorScheme = document.getElementById('chart-color-scheme').value;
+            function addChartElement(data = null, fromLoad = false) {
+                let chartData;
 
-                if (dataRange) {
-                    const chartElement = document.createElement('div');
-                    chartElement.className = 'graphic-element';
-                    chartElement.style.left = '100px';
-                    chartElement.style.top = '100px';
-
-                    const canvas = document.createElement('canvas');
-                    chartElement.appendChild(canvas);
-
-                    const editBtn = document.createElement('button');
-                    editBtn.className = 'edit-btn';
-                    editBtn.textContent = '✏️';
-                    editBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        openModal('chart', chartElement);
-                    });
-
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.className = 'delete-btn';
-                    deleteBtn.textContent = '✕';
-                    deleteBtn.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        chartElement.remove();
-                        charts = charts.filter(ch => ch !== chartElement);
-
-                        saveToHistory({
-                            type: 'remove_chart_element',
-                            element: {
-                                type: chartType,
-                                title: title,
-                                dataRange: dataRange,
-                                showLabels: showLabels,
-                                colorScheme: colorScheme
-                            }
-                        });
-                    });
-
-                    chartElement.appendChild(editBtn);
-                    chartElement.appendChild(deleteBtn);
-                    document.querySelector('.spreadsheet-container').appendChild(chartElement);
-
-                    createChart(canvas, chartType, title, dataRange, showLabels, colorScheme);
-                    makeDraggable(chartElement);
-                    charts.push(chartElement);
-
-                    saveToHistory({
-                        type: 'add_chart_element',
-                        element: {
-                            type: chartType,
-                            title: title,
-                            dataRange: dataRange,
-                            showLabels: showLabels,
-                            colorScheme: colorScheme
+                if (fromLoad) {
+                    chartData = {
+                        id: data.id || `chart_${Date.now()}`,
+                        chartType: data.chartType,
+                        title: data.title,
+                        dataRange: data.dataRange,
+                        showLabels: data.showLabels,
+                        colorScheme: data.colorScheme,
+                        style: data.style
+                    };
+                } else {
+                    const dataRange = document.getElementById('chart-data-range').value;
+                    if (!dataRange) return;
+                    chartData = {
+                        id: `chart_${Date.now()}`,
+                        chartType: document.getElementById('chart-type').value,
+                        title: document.getElementById('chart-title').value,
+                        dataRange: dataRange,
+                        showLabels: document.getElementById('chart-show-labels').checked,
+                        colorScheme: document.getElementById('chart-color-scheme').value,
+                        style: {
+                            left: '150px',
+                            top: '150px',
+                            width: '400px',
+                            height: '300px',
+                            zIndex: 100
                         }
-                    });
+                    };
+                }
 
+                const chartElement = document.createElement('div');
+                chartElement.className = 'graphic-element';
+                chartElement.id = chartData.id;
+                chartElement.style.left = chartData.style.left;
+                chartElement.style.top = chartData.style.top;
+                chartElement.style.width = chartData.style.width;
+                chartElement.style.height = chartData.style.height;
+                chartElement.style.zIndex = chartData.style.zIndex;
+
+                // Stocker les métadonnées sur l'élément pour la sauvegarde et l'édition
+                chartElement.dataset.dataRange = chartData.dataRange;
+                chartElement.dataset.colorScheme = chartData.colorScheme;
+
+                const canvas = document.createElement('canvas');
+                chartElement.appendChild(canvas);
+
+                const editBtn = document.createElement('button');
+                editBtn.className = 'edit-btn';
+                editBtn.textContent = '✏️';
+                editBtn.onclick = (e) => { e.stopPropagation(); openModal('chart', chartElement); };
+                chartElement.appendChild(editBtn);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = '✕';
+                deleteBtn.onclick = (e) => { e.stopPropagation(); chartElement.remove(); };
+                chartElement.appendChild(deleteBtn);
+
+                document.querySelector('.spreadsheet-container').appendChild(chartElement);
+
+                createChart(canvas, chartData.chartType, chartData.title, chartData.dataRange, chartData.showLabels, chartData.colorScheme);
+                makeDraggable(chartElement);
+
+                if (!fromLoad) {
                     document.getElementById('element-modal').classList.remove('active');
                 }
             }
@@ -3455,105 +3305,37 @@ function NOUVELLE_FONCTION(...args) {
             async function saveCustomFunction() {
                 const name = document.getElementById('function-name').value.trim().toUpperCase();
                 const description = document.getElementById('function-description').value;
-                const example = document.getElementById('function-example').value;
-                const params = document.getElementById('function-params').value;
                 const language = document.getElementById('function-language').value;
                 const code = functionEditor.getValue();
 
-                // Validation
-                if (!name) {
-                    alert('Le nom de la fonction est obligatoire');
+                if (!name || !code) {
+                    alert('Le nom de la fonction et le code sont requis.');
                     return;
                 }
 
-                if (!code) {
-                    alert('Le code de la fonction est obligatoire');
-                    return;
-                }
+                const functionData = { name, description, language, code };
 
-                // Vérifier si le nom est déjà utilisé
-                if (currentEditingFunction !== name && standardFunctions.includes(name)) {
-                    alert(`Le nom "${name}" est déjà utilisé par une fonction standard`);
-                    return;
-                }
-
-                // Tester le code selon le langage
                 try {
-                    const language = document.getElementById('function-language').value;
-                    switch(language) {
-                        case 'javascript':
-                            // Créer une fonction temporaire pour tester la syntaxe JS
-                            new Function('return function ' + code);
-                            break;
-                        case 'python':
-                            if (!pyodide) {
-                                if (!pyodideLoading) {
-                                    await initLanguageRuntimes();
-                                } else {
-                                    pyodide = await pyodideLoading;
-                                }
-                            }
-                            // Tester la syntaxe Python
-                            await pyodide.runPythonAsync(`
-                                def test_syntax():
-                                    ${code}
-                            `);
-                            break;
-                        case 'lua':
-                            if (!fengari) {
-                                if (!window.fengari) {
-                                    throw new Error('Fengari n\'est pas chargé');
-                                }
-                                fengari = window.fengari;
-                            }
-                            // Tester la syntaxe Lua
-                            fengari.load(code)();
-                            break;
-                        // Les autres langages seront validés à l'exécution
+                    const response = await fetch(`${CODE_SERVER_URL}/api/functions/save`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(functionData)
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.detail || 'Échec de la sauvegarde de la fonction.');
                     }
+
+                    // Recharger la liste complète des fonctions pour être sûr
+                    await loadCustomFunctions();
+
+                    cancelCustomFunction();
+
                 } catch (e) {
-                    document.getElementById('function-error').classList.add('visible');
-                    document.getElementById('function-error').textContent = 
-                        `Erreur de syntaxe : ${e.message}`;
-                    console.error('Erreur dans le code:', e);
-                    return;
+                    console.error('Erreur lors de la sauvegarde de la fonction personnalisée:', e);
+                    alert(`Erreur lors de la sauvegarde de la fonction : ${e.message}`);
                 }
-
-                // Sauvegarder la fonction
-                const functionObj = {
-                    name: name,
-                    description: description,
-                    example: example,
-                    params: params,
-                    language: language,
-                    code: code
-                };
-
-                // Sauvegarder dans l'historique
-                if (currentEditingFunction) {
-                    // Édition d'une fonction existante
-                    saveToHistory({
-                        type: 'edit_custom_function',
-                        function: customFunctions[currentEditingFunction],
-                        newFunction: functionObj
-                    });
-                } else {
-                    // Nouvelle fonction
-                    saveToHistory({
-                        type: 'add_custom_function',
-                        function: functionObj
-                    });
-                }
-
-                // Mettre à jour les fonctions personnalisées
-                customFunctions[name] = functionObj;
-                updateCustomFunctionsInList();
-
-                // Recharger les fonctions pour les rendre disponibles
-                reloadCustomFunctions();
-
-                // Retour à la liste
-                cancelCustomFunction();
             }
 
             function cancelCustomFunction() {
@@ -3582,20 +3364,25 @@ function NOUVELLE_FONCTION(...args) {
                 currentEditingFunction = name;
             }
 
-            function removeCustomFunction(name) {
+            async function removeCustomFunction(name) {
                 if (confirm(`Voulez-vous vraiment supprimer la fonction "${name}" ?`)) {
-                    // Sauvegarder dans l'historique
-                    saveToHistory({
-                        type: 'remove_custom_function',
-                        function: customFunctions[name]
-                    });
+                    try {
+                        const response = await fetch(`${CODE_SERVER_URL}/api/functions/delete/${name}`, {
+                            method: 'DELETE'
+                        });
 
-                    // Supprimer la fonction
-                    delete customFunctions[name];
-                    updateCustomFunctionsInList();
+                        if (!response.ok) {
+                            const err = await response.json();
+                            throw new Error(err.detail || 'Échec de la suppression de la fonction.');
+                        }
 
-                    // Recharger les fonctions
-                    reloadCustomFunctions();
+                        // Recharger la liste complète des fonctions pour être sûr
+                        await loadCustomFunctions();
+
+                    } catch (e) {
+                        console.error('Erreur lors de la suppression de la fonction personnalisée:', e);
+                        alert(`Erreur lors de la suppression de la fonction : ${e.message}`);
+                    }
                 }
             }
 
@@ -3633,220 +3420,230 @@ function NOUVELLE_FONCTION(...args) {
                 window.removeCustomFunction = removeCustomFunction;
             }
 
-            function reloadCustomFunctions() {
-                // Recharger les fonctions personnalisées dans le scope global
+            function reloadAllCustomFunctions() {
+                // Recharger toutes les fonctions personnalisées dans le scope global
+                // pour qu'elles soient utilisables par le moteur de formules.
                 for (const funcName in customFunctions) {
                     const func = customFunctions[funcName];
-                    const language = func.language || 'javascript';
+                    const language = func.language;
 
+                    // Créer un wrapper pour la fonction qui appellera le backend
                     window[`${funcName}_custom`] = async function(...args) {
                         try {
-                            let result;
-                            
-                            switch(language) {
-                                case 'javascript':
-                                    // Code JavaScript (inchangé)
-                                    const jsBody = `
-                                        ${func.code}
-                                        return ${funcName}(...arguments);
-                                    `;
-                                    const jsArgs = func.params.split(',').map(p => p.trim()).filter(p => p);
-                                    result = new Function(...jsArgs, jsBody)(...args);
-                                    break;
-                                    
-                                case 'python':
-                                    result = await executePythonCode(func.code, args);
-                                    break;
-                                    
-                                case 'lua':
-                                    result = executeLuaCode(func.code, args);
-                                    break;
-                                    
-                                case 'c':
-                                    result = await executeCCode(func.code, args);
-                                    break;
-                                    
-                                case 'php':
-                                    result = await executePHPCode(func.code, args);
-                                    break;
-                                    
-                                default:
-                                    throw new Error(`Langage non supporté: ${language}`);
-                            }
-                            
-                            return result;
+                            return await executeCode(func.code, args, language);
                         } catch (e) {
-                            console.error(`Erreur dans la fonction personnalisée ${funcName}:`, e);
-                            return '#ERREUR';
+                            console.error(`Erreur lors de l'exécution de la fonction personnalisée ${funcName}:`, e);
+                            return 'ERREUR_EXEC';
                         }
                     };
                 }
             }
 
-            function loadCustomFunctions() {
-                const savedFunctions = localStorage.getItem('customSpreadsheetFunctions');
-                if (savedFunctions) {
-                    try {
-                        const parsed = JSON.parse(savedFunctions);
-                        for (const funcName in parsed) {
-                            customFunctions[funcName] = parsed[funcName];
-                        }
-                        reloadCustomFunctions();
-                    } catch (e) {
-                        console.error('Erreur lors du chargement des fonctions personnalisées:', e);
+            async function loadCustomFunctions() {
+                try {
+                    const response = await fetch(`${CODE_SERVER_URL}/api/functions/list`);
+                    if (!response.ok) {
+                        throw new Error('Échec du chargement des fonctions personnalisées.');
                     }
+                    const functionsList = await response.json();
+
+                    // Transformer la liste en dictionnaire
+                    customFunctions = {};
+                    functionsList.forEach(func => {
+                        customFunctions[func.name] = func;
+                    });
+
+                    reloadAllCustomFunctions(); // S'assure que les fonctions sont prêtes à être utilisées
+                    updateCustomFunctionsInList(); // Met à jour l'interface utilisateur
+
+                } catch (e) {
+                    console.error('Erreur lors du chargement des fonctions personnalisées depuis la base de données:', e);
+                    // Ne pas bloquer l'utilisateur si les fonctions ne se chargent pas
                 }
             }
 
-            function saveSpreadsheet() {
-                const data = {
-                    version: '1.0',
-                    cells: [],
-                    elements: [],
-                    charts: [],
-                    history: history,
-                    customFunctions: customFunctions
-                };
+            async function saveSpreadsheet() {
+                console.log("Sauvegarde du tableur...");
 
-                // Sauvegarder les cellules
+                // 1. Rassembler les données des cellules
+                const cellsData = {};
                 document.querySelectorAll('.cell').forEach(cell => {
                     if (cell.textContent || cell.dataset.formula || hasStyle(cell)) {
-                        data.cells.push({
-                            coords: cell.dataset.coords,
-                            content: cell.textContent,
-                            formula: cell.dataset.formula,
+                        cellsData[cell.dataset.coords] = {
+                            value: cell.textContent,
+                            formula: cell.dataset.formula || null,
                             style: getCellStyle(cell)
-                        });
+                        };
                     }
                 });
 
-                // Sauvegarder les éléments texte
-                elements.forEach(el => {
-                    data.elements.push({
+                // 2. Rassembler les données des éléments flottants (texte)
+                const elementsData = Array.from(document.querySelectorAll('.text-element')).map(el => {
+                    const textContent = el.querySelector('.text-content');
+                    return {
+                        id: el.id,
                         type: 'text',
-                        content: el.childNodes[0].nodeValue,
-                        color: el.style.color,
-                        bgColor: el.style.backgroundColor,
-                        left: el.style.left,
-                        top: el.style.top,
-                        width: el.style.width,
-                        height: el.style.height
-                    });
-                });
-
-                // Sauvegarder les graphiques
-                charts.forEach(chart => {
-                    const canvas = chart.querySelector('canvas');
-                    if (canvas) {
-                        const chartObj = Chart.getChart(canvas);
-                        if (chartObj) {
-                            data.charts.push({
-                                type: chartObj.config.type,
-                                title: chartObj.config.options.plugins.title.text,
-                                dataRange: document.getElementById('chart-data-range').value,
-                                showLabels: document.getElementById('chart-show-labels').checked,
-                                colorScheme: document.getElementById('chart-color-scheme').value,
-                                left: chart.style.left,
-                                top: chart.style.top,
-                                width: chart.style.width,
-                                height: chart.style.height
-                            });
-                        }
-                    }
-                });
-
-                // Sauvegarder les fonctions personnalisées dans localStorage
-                localStorage.setItem('customSpreadsheetFunctions', JSON.stringify(customFunctions));
-
-                const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'tableur-elegante-pro.json';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
-
-            function loadSpreadsheet() {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.json';
-                input.onchange = function(e) {
-                    const file = e.target.files[0];
-                    if (!file) return;
-
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        try {
-                            const data = JSON.parse(e.target.result);
-
-                            // Réinitialiser le tableur
-                            resetSpreadsheet();
-                            history = [];
-                            historyIndex = -1;
-
-                            // Charger les cellules
-                            if (data.cells) {
-                                data.cells.forEach(cellData => {
-                                    const cell = document.querySelector(`.cell[data-coords="${cellData.coords}"]`);
-                                    if (cell) {
-                                        if (cellData.formula) {
-                                            cell.dataset.formula = cellData.formula;
-                                            try {
-                                                cell.textContent = evaluateFormula(cellData.formula.substring(1), cellData.coords);
-                                            } catch (e) {
-                                                cell.textContent = '#ERREUR';
-                                            }
-                                        } else {
-                                            cell.textContent = cellData.content || '';
-                                        }
-
-                                        if (cellData.style) {
-                                            applyCellStyle(cell, cellData.style);
-                                        }
-                                    }
-                                });
-                            }
-
-                            // Charger les éléments texte
-                            if (data.elements) {
-                                data.elements.forEach(el => {
-                                    addTextElementFromHistory(el);
-                                });
-                            }
-
-                            // Charger les graphiques
-                            if (data.charts) {
-                                data.charts.forEach(chart => {
-                                    addChartElementFromHistory(chart);
-                                });
-                            }
-
-                            // Charger l'historique si présent
-                            if (data.history) {
-                                history = data.history;
-                                historyIndex = history.length - 1;
-                                updateHistoryUI();
-                                updateUndoRedoButtons();
-                            }
-
-                            // Charger les fonctions personnalisées
-                            if (data.customFunctions) {
-                                customFunctions = data.customFunctions;
-                                reloadCustomFunctions();
-                                updateCustomFunctionsInList();
-                            }
-
-                        } catch (e) {
-                            console.error('Erreur lors du chargement du fichier:', e);
-                            alert('Erreur lors du chargement du fichier. Veuillez vérifier le format.');
+                        content: textContent ? textContent.textContent : '',
+                        style: {
+                            left: el.style.left,
+                            top: el.style.top,
+                            width: el.style.width,
+                            height: el.style.height,
+                            color: el.style.color,
+                            backgroundColor: el.style.backgroundColor,
+                            zIndex: el.style.zIndex
                         }
                     };
-                    reader.readAsText(file);
+                });
+
+                // 3. Rassembler les données des graphiques
+                const chartsData = Array.from(document.querySelectorAll('.graphic-element')).map(el => {
+                    const chartInstance = Chart.getChart(el.querySelector('canvas'));
+                    if (!chartInstance) return null;
+                    return {
+                        id: el.id,
+                        type: 'chart',
+                        chartType: chartInstance.config.type,
+                        dataRange: el.dataset.dataRange,
+                        title: chartInstance.options.plugins.title.text,
+                        showLabels: chartInstance.options.plugins.legend.display,
+                        colorScheme: el.dataset.colorScheme,
+                        style: {
+                            left: el.style.left,
+                            top: el.style.top,
+                            width: el.style.width,
+                            height: el.style.height,
+                            zIndex: el.style.zIndex
+                        }
+                    };
+                }).filter(Boolean); // Filtrer les graphiques nuls
+
+                // 4. Créer le payload complet
+                const spreadsheetData = {
+                    cells: cellsData,
+                    elements: elementsData,
+                    charts: chartsData
                 };
-                input.click();
+
+                // 5. Envoyer au backend
+                try {
+                    const response = await fetch(`${CODE_SERVER_URL}/api/spreadsheet/save`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: "default", // Pour l'instant, on utilise une seule feuille de calcul
+                            data: spreadsheetData
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Échec de la sauvegarde des données du tableur.');
+                    }
+
+                    const result = await response.json();
+                    console.log('Tableur sauvegardé avec succès:', result.name);
+                    alert('Tableur sauvegardé avec succès !');
+
+                } catch (e) {
+                    console.error('Erreur lors de la sauvegarde du tableur:', e);
+                    alert('Erreur lors de la sauvegarde du tableur dans la base de données. Voir la console pour les détails.');
+                }
+            }
+
+            function recalculateAllFormulas() {
+                // Créer une liste de toutes les cellules avec des formules
+                const formulaCells = Array.from(document.querySelectorAll('.cell[data-formula]'));
+
+                // Topologie-sort-like approach: recalculate cells with no dependencies first
+                // For simplicity, we just iterate multiple times. A real implementation
+                // would build a dependency graph.
+                const maxIterations = formulaCells.length;
+                for (let i = 0; i < maxIterations; i++) {
+                    let changed = false;
+                    formulaCells.forEach(cell => {
+                        try {
+                            const oldText = cell.textContent;
+                            const formula = cell.dataset.formula;
+                            const result = evaluateFormula(formula.substring(1), cell.dataset.coords);
+                            if (result !== oldText) {
+                                cell.textContent = result;
+                                changed = true;
+                            }
+                        } catch (e) {
+                            cell.textContent = '#ERREUR';
+                            console.error(`Erreur lors du recalcul de la formule pour ${cell.dataset.coords}:`, e);
+                        }
+                    });
+                    // If no values changed in an iteration, we can stop
+                    if (!changed && i > 0) break;
+                }
+            }
+
+            async function loadSpreadsheet() {
+                try {
+                    const response = await fetch(`${CODE_SERVER_URL}/api/spreadsheet/load/default`);
+
+                    if (!response.ok) {
+                        if (response.status === 404) {
+                            console.log('Aucun tableur sauvegardé trouvé. Initialisation d\'une feuille vierge.');
+                            // Pas besoin d'appeler initExampleData, la feuille est déjà vierge.
+                        } else {
+                            throw new Error(`Erreur serveur: ${response.status}`);
+                        }
+                        return;
+                    }
+
+                    const data = await response.json();
+                    renderSpreadsheet(data);
+
+                    console.log('Tableur chargé depuis la base de données.');
+
+                } catch (e) {
+                    console.error('Erreur lors du chargement du tableur depuis la base de données:', e);
+                    alert('Impossible de charger les données du tableur. Une feuille vierge sera utilisée.');
+                }
+            }
+
+            function renderSpreadsheet(data) {
+                // 1. Réinitialiser la feuille de calcul
+                resetSpreadsheet();
+
+                // 2. Rendre les cellules
+                if (data.cells) {
+                    for (const coords in data.cells) {
+                        const cellData = data.cells[coords];
+                        const cell = document.querySelector(`.cell[data-coords="${coords}"]`);
+                        if (cell) {
+                            cell.textContent = cellData.value || '';
+                            if (cellData.formula) {
+                                cell.dataset.formula = cellData.formula;
+                            }
+                            if (cellData.style) {
+                                applyCellStyle(cell, cellData.style);
+                            }
+                        }
+                    }
+                }
+
+                // 3. Rendre les éléments de texte
+                if (data.elements) {
+                    data.elements.forEach(elementData => {
+                        // We pass 'true' to indicate this is from loading, not a new user action
+                        addTextElement(elementData, true);
+                    });
+                }
+
+                // 4. Rendre les graphiques
+                if (data.charts) {
+                    data.charts.forEach(chartData => {
+                        // We pass 'true' to indicate this is from loading, not a new user action
+                        addChartElement(chartData, true);
+                    });
+                }
+
+                // 5. Recalculer toutes les formules après le chargement
+                recalculateAllFormulas();
             }
 
             function hasStyle(cell) {
@@ -3870,15 +3667,15 @@ function NOUVELLE_FONCTION(...args) {
 
                 // Ajouter les en-têtes de colonne
                 const headerRow = [''];
-                for (let i = 0; i < cols; i++) {
+                for (let i = 0; i < initialCols; i++) {
                     headerRow.push(String.fromCharCode(65 + i));
                 }
                 wsData.push(headerRow);
 
                 // Ajouter les données
-                for (let i = 0; i < rows; i++) {
+                for (let i = 0; i < initialRows; i++) {
                     const rowData = [i + 1];
-                    for (let j = 0; j < cols; j++) {
+                    for (let j = 0; j < initialCols; j++) {
                         const cell = document.querySelector(`.cell[data-row="${i}"][data-col="${j}"]`);
                         if (cell) {
                             rowData.push(cell.dataset.formula || cell.textContent);
@@ -3999,8 +3796,8 @@ function NOUVELLE_FONCTION(...args) {
                     if (!match) throw new Error('Format de plage invalide');
 
                     const startCol = match[1].charCodeAt(0) - 65; // Convertir A->0, B->1, etc.
-                    const startRow = importer.type === 'fixed' 
-                        ? parseInt(match[2]) - 1 
+                    const startRow = importer.type === 'fixed'
+                        ? parseInt(match[2]) - 1
                         : lastIncrementalRow[importer.range] + 1;
 
                     // Fonction pour formater un objet en chaîne JSON lisible
@@ -4045,7 +3842,7 @@ function NOUVELLE_FONCTION(...args) {
                     } else if (typeof data === 'object' && data !== null) {
                         Object.entries(data).forEach(([key, value], index) => {
                             const currentRow = importer.type === 'fixed' ? startRow + index : startRow + index;
-                            
+
                             // Stocker la clé
                             const keyCell = document.querySelector(
                                 `.cell[data-row="${currentRow}"][data-col="${startCol}"]`
@@ -4092,7 +3889,7 @@ function NOUVELLE_FONCTION(...args) {
                     console.error('Erreur lors de l\'importation des données:', error);
                     importer.error = error.message;
                     importer.lastUpdate = new Date();
-                    
+
                     // Marquer l'erreur dans la cellule de départ
                     const cell = document.querySelector(`.cell[data-coords="${importer.range}"]`);
                     if (cell) {
@@ -4113,8 +3910,8 @@ function NOUVELLE_FONCTION(...args) {
                 Object.values(dataImporters).forEach(importer => {
                     const item = document.createElement('div');
                     item.className = 'import-item';
-                    
-                    const lastUpdateText = importer.lastUpdate 
+
+                    const lastUpdateText = importer.lastUpdate
                         ? `Dernière mise à jour : ${importer.lastUpdate.toLocaleTimeString()}`
                         : 'Pas encore mis à jour';
 
@@ -4130,7 +3927,7 @@ function NOUVELLE_FONCTION(...args) {
                         </div>
                         <div class="import-status ${importer.status}">${importer.status === 'active' ? 'Actif' : 'Pause'}</div>
                         <div class="import-actions">
-                            ${importer.status === 'active' 
+                            ${importer.status === 'active'
                                 ? `<button class="small" onclick="pauseImport('${importer.range}')">⏸️</button>`
                                 : `<button class="small" onclick="resumeImport('${importer.range}')">▶️</button>`
                             }
@@ -4226,128 +4023,6 @@ function NOUVELLE_FONCTION(...args) {
                 reader.readAsArrayBuffer(file);
             }
 
-            function initExampleData() {
-                // Ajouter les gestionnaires d'événements pour les boutons d'ajout
-            document.getElementById('add-rows-btn').addEventListener('click', () => addRows());
-            document.getElementById('add-cols-btn').addEventListener('click', () => addColumns());
-
-            // Initialiser les runtimes des langages
-            initLanguageRuntimes().then(() => {
-                console.log('Runtimes initialisés avec succès');
-            }).catch(e => {
-                console.error('Erreur lors de l\'initialisation des runtimes:', e);
-            });
-
-            // Exemple de formules
-                const a1 = document.querySelector('.cell[data-coords="A1"]');
-                a1.textContent = '10';
-                saveCellContent(a1, '10');
-
-                const b1 = document.querySelector('.cell[data-coords="B1"]');
-                b1.textContent = '20';
-                saveCellContent(b1, '20');
-
-                const c1 = document.querySelector('.cell[data-coords="C1"]');
-                c1.textContent = '=SOMME(A1:B1)';
-                saveCellContent(c1, '=SOMME(A1:B1)');
-
-                const a2 = document.querySelector('.cell[data-coords="A2"]');
-                a2.textContent = '5';
-                saveCellContent(a2, '5');
-
-                const b2 = document.querySelector('.cell[data-coords="B2"]');
-                b2.textContent = '=PUISSANCE(A2;2)';
-                saveCellContent(b2, '=PUISSANCE(A2;2)');
-
-                const c2 = document.querySelector('.cell[data-coords="C2"]');
-                c2.textContent = '=RACINE(B2)';
-                saveCellContent(c2, '=RACINE(B2)');
-
-                const a3 = document.querySelector('.cell[data-coords="A3"]');
-                a3.textContent = '=PI()';
-                saveCellContent(a3, '=PI()');
-
-                const b3 = document.querySelector('.cell[data-coords="B3"]');
-                b3.textContent = '=ARRONDI(A3;3)';
-                saveCellContent(b3, '=ARRONDI(A3;3)');
-
-                const c3 = document.querySelector('.cell[data-coords="C3"]');
-                c3.textContent = '=ALEA()';
-                saveCellContent(c3, '=ALEA()');
-
-                // Exemple de fonction personnalisée
-                const exampleFunction = {
-                    name: 'CARRE',
-                    description: 'Calcule le carré d\'un nombre',
-                    example: '=CARRE(A1)',
-                    params: 'nombre',
-                    code: `function CARRE(nombre) {
-    const n = parseFloat(nombre) || 0;
-    return n * n;
-}`
-                };
-
-                customFunctions.CARRE = exampleFunction;
-                window.CARRE_custom = function(nombre) {
-                    const n = parseFloat(nombre) || 0;
-                    return n * n;
-                };
-
-                const d3 = document.querySelector('.cell[data-coords="D3"]');
-                d3.textContent = '=CARRE(A2)';
-                saveCellContent(d3, '=CARRE(A2)');
-
-                // Exemple de texte
-                const exampleText = document.createElement('div');
-                exampleText.className = 'text-element';
-                exampleText.textContent = 'Bienvenue dans votre tableur!\n\nFonctionnalités disponibles:\n- Formules avancées\n- Mise en forme\n- Graphiques\n- Historique\n- Import/Export Excel\n- Fonctions personnalisées';
-                exampleText.style.color = 'var(--deep-purple)';
-                exampleText.style.backgroundColor = 'var(--soft-purple)';
-                exampleText.style.left = '400px';
-                exampleText.style.top = '50px';
-                exampleText.style.width = '250px';
-
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'delete-btn';
-                deleteBtn.textContent = '✕';
-                deleteBtn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    exampleText.remove();
-                    elements = elements.filter(el => el !== exampleText);
-                });
-
-                exampleText.appendChild(deleteBtn);
-                document.querySelector('.spreadsheet-container').appendChild(exampleText);
-                makeDraggable(exampleText);
-                elements.push(exampleText);
-
-                // Exemple de graphique
-                const chartElement = document.createElement('div');
-                chartElement.className = 'graphic-element';
-                chartElement.style.left = '400px';
-                chartElement.style.top = '200px';
-                chartElement.style.width = '300px';
-                chartElement.style.height = '200px';
-
-                const canvas = document.createElement('canvas');
-                chartElement.appendChild(canvas);
-
-                const deleteChartBtn = document.createElement('button');
-                deleteChartBtn.className = 'delete-btn';
-                deleteChartBtn.textContent = '✕';
-                deleteChartBtn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    chartElement.remove();
-                    charts = charts.filter(ch => ch !== chartElement);
-                });
-
-                chartElement.appendChild(deleteChartBtn);
-                document.querySelector('.spreadsheet-container').appendChild(chartElement);
-
-                createChart(canvas, 'bar', 'Exemple de graphique', 'A1:B3', true, 'default');
-                makeDraggable(chartElement);
-                charts.push(chartElement);
-            }
 
             // Fonctions standard pour référence
             const standardFunctions = [
