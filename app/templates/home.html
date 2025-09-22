@@ -1,0 +1,67 @@
+{% extends "layout.html" %}
+{% block title %}Accueil - Tableur Pro{% endblock %}
+
+{% block content %}
+<style>
+    .home-container {
+        max-width: 800px;
+        margin: 4rem auto;
+        padding: 2rem;
+        background: white;
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        text-align: center;
+    }
+    .spreadsheet-list {
+        list-style: none;
+        padding: 0;
+        margin-top: 2rem;
+    }
+    .spreadsheet-list li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid var(--light-gray);
+    }
+    .spreadsheet-list li:hover {
+        background: #f8f9fa;
+    }
+    .spreadsheet-list a {
+        text-decoration: none;
+        color: var(--deep-purple);
+        font-weight: 500;
+    }
+    .new-spreadsheet-form {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 2rem;
+    }
+    .new-spreadsheet-form input {
+        flex: 1;
+        padding: 0.5rem;
+    }
+</style>
+
+<div class="home-container">
+    <h1>Bienvenue sur Tableur Pro</h1>
+    <p>Choisissez un tableur existant ou créez-en un nouveau pour commencer.</p>
+
+    <h2>Mes Tableurs</h2>
+    <ul class="spreadsheet-list">
+        {% for sheet in spreadsheets %}
+            <li>
+                <a href="{{ url_for('spreadsheet_view', name=sheet.name) }}">{{ sheet.name }}</a>
+                <span>Créé le: {{ sheet.created_at.strftime('%Y-%m-%d') }}</span>
+            </li>
+        {% else %}
+            <li>Aucun tableur trouvé.</li>
+        {% endfor %}
+    </ul>
+
+    <form action="{{ url_for('create_spreadsheet_post') }}" method="POST" class="new-spreadsheet-form">
+        <input type="text" name="spreadsheet_name" placeholder="Nom du nouveau tableur" required>
+        <button type="submit" class="primary">Créer</button>
+    </form>
+</div>
+{% endblock %}

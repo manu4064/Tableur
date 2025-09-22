@@ -1,0 +1,399 @@
+{% extends "layout.html" %}
+{% block title %}{{ spreadsheet_name }} - Tableur Pro{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <header>
+            <div class="logo">Tableur Pro</div>
+            <div class="toolbar">
+                <div class="toolbar-group">
+                    <button id="undo-btn" title="Annuler (Ctrl+Z)" disabled>↩️</button>
+                    <button id="redo-btn" title="Rétablir (Ctrl+Y)" disabled>↪️</button>
+                </div>
+                <div class="toolbar-group">
+                    <button id="add-text-btn" title="Ajouter du texte">✏️ Texte</button>
+                    <button id="add-chart-btn" title="Ajouter un graphique">📊 Graphique</button>
+                    <button id="import-data-btn" title="Importer des données">🌐 Importer</button>
+                    <button id="viz-mode-btn" title="Mode Visualisation">👁️ Visualiser</button>
+                </div>
+                <div class="toolbar-group">
+                    <button id="add-rows-btn" title="Ajouter des lignes">⏬ Lignes</button>
+                    <button id="add-cols-btn" title="Ajouter des colonnes">➡️ Colonnes</button>
+                </div>
+                <div class="toolbar-group">
+                    <div class="dropdown">
+                        <button id="file-btn" class="primary">📁 Fichier</button>
+                        <div class="dropdown-content" id="file-dropdown">
+                            <div class="dropdown-item" id="import-excel">
+                                <span>📥 Importer Excel</span>
+                                <input type="file" class="file-input" id="excel-input" accept=".xlsx, .xls, .csv">
+                            </div>
+                            <div class="dropdown-item" id="export-excel">📤 Exporter Excel</div>
+                            <div class="dropdown-item" id="export-pdf">📄 Exporter PDF</div>
+                            <div class="dropdown-item" id="save-btn">💾 Sauvegarder</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="toolbar-group">
+                    <button id="functions-btn">fx Fonctions</button>
+                    <button id="custom-functions-btn">⚙️ Fonctions personnalisées</button>
+                    <button id="reports-btn">📈 Rapports</button>
+                    <button id="history-btn">⏳ Historique</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="formula-bar">
+            <div class="formula-input-container">
+                <div class="cell-reference" id="current-cell">A1</div>
+                <input type="text" class="formula-input" id="formula-input" placeholder="Saisir une valeur ou une formule">
+            </div>
+            <div class="format-toolbar">
+                <button class="small" id="bold-btn" title="Gras (Ctrl+B)">B</button>
+                <button class="small" id="italic-btn" title="Italique (Ctrl+I)">I</button>
+                <button class="small" id="text-color-btn" title="Couleur du texte">A</button>
+                <button class="small" id="fill-color-btn" title="Couleur de fond">🟦</button>
+                <div class="dropdown">
+                    <button class="small" id="align-btn" title="Alignement">≡</button>
+                    <div class="dropdown-content" id="align-dropdown">
+                        <div class="dropdown-item" data-align="left">↖️ Gauche</div>
+                        <div class="dropdown-item" data-align="center">↕️ Centrer</div>
+                        <div class="dropdown-item" data-align="right">↘️ Droite</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="spreadsheet-container" id="spreadsheet-container" data-spreadsheet-name="{{ spreadsheet_name }}">
+            <table class="spreadsheet" id="spreadsheet">
+                <thead>
+                    <tr>
+                        <th class="corner-header"></th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <div class="history-panel" id="history-panel">
+                <div class="history-header">
+                    <h3>Historique</h3>
+                    <button id="close-history" class="small">✕</button>
+                </div>
+                <div class="history-items" id="history-items"></div>
+            </div>
+
+            <div class="reports-panel" id="reports-panel">
+                <div class="panel-header">
+                    <h3>Gestionnaire de Rapports</h3>
+                    <button id="close-reports" class="small">✕</button>
+                </div>
+                <div class="panel-content">
+                    <button id="new-report-btn" class="primary small" style="margin-bottom: 1rem;">➕ Nouveau Rapport</button>
+                    <div id="report-list">
+                        <!-- La liste des rapports sera ajoutée ici -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="custom-functions-panel" id="custom-functions-panel">
+                <div class="panel-header">
+                    <h3>Fonctions personnalisées</h3>
+                    <button id="close-custom-functions" class="small">✕</button>
+                </div>
+                <div class="panel-content">
+                    <div class="theme-selector">
+                        <div class="theme-option active" data-theme="dawn">☀️ Clair</div>
+                        <div class="theme-option" data-theme="twilight">🌙 Sombre</div>
+                    </div>
+
+                    <div id="function-editor-container" style="display: none;">
+                        <div class="form-group">
+                            <label for="function-name">Nom de la fonction*</label>
+                            <input type="text" id="function-name" placeholder="Ex: MAFONCTION" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="function-description">Description</label>
+                            <input type="text" id="function-description" placeholder="Ex: Calcule quelque chose">
+                        </div>
+                        <div class="form-group">
+                            <label for="function-example">Exemple d'utilisation</label>
+                            <input type="text" id="function-example" placeholder="Ex: =MAFONCTION(A1; B2)">
+                        </div>
+                        <div class="form-group">
+                            <label>Paramètres (séparés par des virgules)</label>
+                            <input type="text" id="function-params" placeholder="Ex: param1, param2, param3">
+                        </div>
+                        <div class="form-group">
+                            <label for="function-language">Langage *</label>
+                            <select id="function-language">
+                                <option value="javascript">JavaScript</option>
+                                <option value="python">Python</option>
+                                <option value="lua">Lua</option>
+                                <option value="c">C</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Code *</label>
+                            <div id="function-code-editor" class="ace-editor"></div>
+                            <div id="function-error" class="function-error">
+                                Erreur dans le code. Veuillez corriger avant de sauvegarder.
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                            <button id="save-function-btn" class="primary small">Sauvegarder</button>
+                            <button id="cancel-function-btn" class="small">Annuler</button>
+                        </div>
+                    </div>
+
+                    <div id="function-list-container">
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                            <button id="new-function-btn" class="primary small">➕ Nouvelle fonction</button>
+                            <button id="manage-packages-btn" class="small">📦 Gérer les packages</button>
+                        </div>
+                        <div id="function-list">
+                            <!-- Les fonctions seront ajoutées ici -->
+                        </div>
+                    </div>
+
+                    <div id="packages-container" style="display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h3>Gestion des packages</h3>
+                            <button id="back-to-functions-btn" class="small">↩ Retour</button>
+                        </div>
+                        <div class="form-group">
+                            <label>Langage</label>
+                            <select id="package-language">
+                                <option value="python">Python (pip)</option>
+                                <!-- Autres gestionnaires de packages à venir -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Nom du package</label>
+                            <input type="text" id="package-name" placeholder="Ex: pandas, numpy, etc.">
+                        </div>
+                        <button id="install-package-btn" class="primary small">Installer le package</button>
+                        <div id="package-status" style="margin-top: 1rem;"></div>
+                        <div id="installed-packages" style="margin-top: 1rem;">
+                            <h4>Packages installés</h4>
+                            <div id="package-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="element-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Ajouter un élément</h2>
+                <button id="close-modal">✕</button>
+            </div>
+
+            <div class="modal-tabs">
+                <div class="modal-tab active" data-tab="text">Texte</div>
+                <div class="modal-tab" data-tab="chart">Graphique</div>
+                <div class="modal-tab" data-tab="functions">Fonctions</div>
+                <div class="modal-tab" data-tab="import">Importer des données</div>
+            </div>
+
+            <div class="modal-body active" data-tab="text">
+                <div class="form-group">
+                    <label for="text-content">Contenu</label>
+                    <textarea id="text-content" placeholder="Saisir votre texte ici..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="text-color">Couleur du texte</label>
+                    <div class="color-picker" id="text-color-picker">
+                        <div class="color-option selected" style="background: #333;" data-color="#333"></div>
+                        <div class="color-option" style="background: var(--primary-purple);" data-color="var(--primary-purple)"></div>
+                        <div class="color-option" style="background: var(--crimson);" data-color="var(--crimson)"></div>
+                        <div class="color-option" style="background: var(--deep-purple);" data-color="var(--deep-purple)"></div>
+                        <div class="color-option" style="background: #27ae60;" data-color="#27ae60"></div>
+                        <div class="color-option" style="background: #e74c3c;" data-color="#e74c3c"></div>
+                        <div class="color-option" style="background: #3498db;" data-color="#3498db"></div>
+                        <div class="color-option" style="background: #f39c12;" data-color="#f39c12"></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="text-bg-color">Couleur de fond</label>
+                    <div class="color-picker" id="text-bg-color-picker">
+                        <div class="color-option selected" style="background: white;" data-color="white"></div>
+                        <div class="color-option" style="background: var(--soft-purple);" data-color="var(--soft-purple)"></div>
+                        <div class="color-option" style="background: var(--light-pink);" data-color="var(--light-pink)"></div>
+                        <div class="color-option" style="background: #f9f9f9;" data-color="#f9f9f9"></div>
+                        <div class="color-option" style="background: #e8f4f8;" data-color="#e8f4f8"></div>
+                        <div class="color-option" style="background: #f0f8e9;" data-color="#f0f8e9"></div>
+                        <div class="color-option" style="background: #fff3e0;" data-color="#fff3e0"></div>
+                    </div>
+                </div>
+                <button id="add-text-element" class="primary">Ajouter le texte</button>
+            </div>
+
+            <div class="modal-body" data-tab="chart">
+                <div class="form-group">
+                    <label for="chart-type">Type de graphique</label>
+                    <select id="chart-type">
+                        <option value="bar">Histogramme</option>
+                        <option value="line">Courbe</option>
+                        <option value="pie">Camembert</option>
+                        <option value="doughnut">Anneau</option>
+                        <option value="polarArea">Polaire</option>
+                        <option value="radar">Radar</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="chart-title">Titre</label>
+                    <input type="text" id="chart-title" placeholder="Titre du graphique">
+                </div>
+                <div class="form-group">
+                    <label for="chart-data-range">Plage de données (ex: A1:B10)</label>
+                    <input type="text" id="chart-data-range" placeholder="ex: A1:B10">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="chart-show-labels" checked> Afficher les étiquettes
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="chart-color-scheme">Palette de couleurs</label>
+                    <select id="chart-color-scheme">
+                        <option value="default">Par défaut</option>
+                        <option value="pastel">Pastel</option>
+                        <option value="vibrant">Vibrant</option>
+                        <option value="monochrome">Monochrome</option>
+                    </select>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chart-preview"></canvas>
+                </div>
+                <button id="add-chart-element" class="primary">Ajouter le graphique</button>
+            </div>
+
+            <div class="modal-body" data-tab="functions">
+                <div class="form-group">
+                    <label for="function-search">Rechercher une fonction</label>
+                    <input type="text" id="function-search" placeholder="Ex: puissance, racine...">
+                </div>
+                <div class="functions-list" id="functions-list">
+                    <!-- Fonctions standard seront ajoutées ici -->
+                </div>
+                <div class="form-group">
+                    <label for="function-args">Arguments</label>
+                    <input type="text" id="function-args" placeholder="Ex: A1; 2 ou 5; B2:C10">
+                </div>
+                <button id="insert-function" class="primary">Insérer la fonction</button>
+            </div>
+
+            <div class="modal-body" data-tab="import">
+                <div class="form-group">
+                    <label for="import-url">URL de la source de données (JSON)</label>
+                    <input type="text" id="import-url" placeholder="https://api.example.com/data">
+                </div>
+                <div class="form-group">
+                    <label for="import-type">Type d'import</label>
+                    <select id="import-type">
+                        <option value="fixed">Import fixe (même cellule)</option>
+                        <option value="incremental">Import incrémentiel (nouvelles lignes)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="import-range">Cellule de destination</label>
+                    <input type="text" id="import-range" placeholder="A1">
+                </div>
+                <div class="form-group">
+                    <label for="import-interval">Intervalle de rafraîchissement (secondes)</label>
+                    <input type="number" id="import-interval" min="10" value="60">
+                </div>
+                <div id="import-name-group" class="form-group">
+                    <label for="import-name">Nom de l'import (pour référence)</label>
+                    <input type="text" id="import-name" placeholder="Import 1">
+                </div>
+                <button id="start-import" class="primary">Démarrer l'importation</button>
+
+                <div id="active-imports" style="margin-top: 2rem;">
+                    <h3>Imports actifs</h3>
+                    <div id="imports-list" class="imports-list">
+                        <!-- Les imports actifs seront ajoutés ici -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="color-modal">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header">
+                <h2 id="color-modal-title">Sélectionner une couleur</h2>
+                <button id="close-color-modal">✕</button>
+            </div>
+            <div class="form-group">
+                <label for="color-palette">Palette</label>
+                <div class="color-picker" id="color-palette">
+                    <!-- A large number of color options are here -->
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="custom-color">Couleur personnalisée</label>
+                <input type="color" id="custom-color" value="#ffffff">
+            </div>
+            <button id="apply-color" class="primary">Appliquer</button>
+        </div>
+    </div>
+
+    <div class="report-editor" id="report-editor">
+        <div class="report-toolbar">
+            <div class="form-group" style="margin-bottom: 0;">
+                <input type="text" id="report-name-input" placeholder="Nom du rapport" style="min-width: 300px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <input type="text" id="report-desc-input" placeholder="Description du rapport" style="min-width: 400px;">
+            </div>
+            <div class="toolbar-group">
+                <button id="add-report-element-btn" class="small primary">➕ Ajouter un Élément</button>
+                <button id="save-report-btn" class="small primary">💾 Sauvegarder</button>
+                <button id="export-report-pdf-btn" class="small">📄 Exporter PDF</button>
+            </div>
+            <button id="close-report-editor-btn" style="margin-left: auto;">Fermer</button>
+        </div>
+        <div class="report-canvas" id="report-canvas">
+            <!-- Les éléments du rapport seront ajoutés ici -->
+        </div>
+    </div>
+
+    <div class="modal" id="add-element-modal">
+        <div class="modal-content" style="width: 500px;">
+            <div class="modal-header">
+                <h2>Ajouter un Élément au Rapport</h2>
+                <button id="close-add-element-modal">✕</button>
+            </div>
+            <div class="form-group">
+                <label for="report-element-type">Type d'élément</label>
+                <select id="report-element-type">
+                    <option value="chart">Graphique</option>
+                    <option value="range">Plage de cellules</option>
+                    <option value="text">Texte statique</option>
+                </select>
+            </div>
+            <div id="element-options-chart" class="element-options">
+                <div class="form-group">
+                    <label for="chart-source-select">Choisir un graphique existant</label>
+                    <select id="chart-source-select"></select>
+                </div>
+            </div>
+            <div id="element-options-range" class="element-options" style="display: none;">
+                <div class="form-group">
+                    <label for="cell-range-input">Plage de cellules (ex: A1:D10)</label>
+                    <input type="text" id="cell-range-input" placeholder="A1:D10">
+                </div>
+            </div>
+            <div id="element-options-text" class="element-options" style="display: none;">
+                <div class="form-group">
+                    <label for="static-text-input">Contenu du texte</label>
+                    <textarea id="static-text-input"></textarea>
+                </div>
+            </div>
+            <button id="confirm-add-report-element" class="primary">Ajouter</button>
+        </div>
+    </div>
+{% endblock %}

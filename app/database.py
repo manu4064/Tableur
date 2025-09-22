@@ -99,6 +99,12 @@ def load_spreadsheet(db, name: str):
     """
     return db.query(Spreadsheet).filter(Spreadsheet.name == name).first()
 
+def list_spreadsheets(db):
+    """
+    Returns a list of all spreadsheets.
+    """
+    return db.query(Spreadsheet).all()
+
 def save_custom_function(db, name: str, description: str, language: str, code: str):
     """
     Saves or updates a global custom function.
