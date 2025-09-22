@@ -18,6 +18,10 @@ from database import (
     list_custom_functions,
     delete_custom_function,
     create_db_and_tables,
+    save_report_template,
+    list_report_templates,
+    load_report_template,
+    delete_report_template,
 )
 from code_executor import CodeExecutor, Language
 from pydantic import BaseModel as PydanticBaseModel
@@ -67,6 +71,15 @@ class CustomFunctionSchema(BaseModel):
     description: Optional[str] = None
     language: str
     code: str
+
+class ReportTemplateSchema(BaseModel):
+    id: Optional[int] = None
+    name: str
+    description: Optional[str] = None
+    layout: Dict[str, Any]
+
+    class Config:
+        orm_mode = True
 
 # --- Global Instances ---
 executor = CodeExecutor()
@@ -191,6 +204,50 @@ async def delete_function_endpoint(name: str, db: Session = Depends(get_db)):
 
     logger.info(f"Function '{name}' deleted successfully.")
     return {"status": "success", "name": name}
+
+# --- Report Template API Endpoints ---
+
+@app.post("/api/reports/save", response_model=ReportTemplateSchema)
+async def save_report_endpoint(report_data: ReportTemplateSchema, db: Session = Depends(get_db)):
+    """Saves or updates a report template."""
+    logger.info(f"Saving report template '{report_data.name}'...")
+    try:
+        template = save_report_template(
+            db,
+            name=report_data.name,
+            description=report_data.description,
+            layout=report_data.layout
+        )
+        return template
+    except Exception as e:
+        logger.error(f"Failed to save report template '{report_data.name}': {e}")
+        raise HTTPException(status_code=500, detail="Failed to save report template.")
+
+@app.get("/api/reports/list", response_model=List[ReportTemplateSchema])
+async def list_reports_endpoint(db: Session = Depends(get_db)):
+    """Lists all saved report templates."""
+    logger.info("Fetching list of report templates...")
+    templates = list_report_templates(db)
+    return templates
+
+@app.get("/api/reports/load/{template_id}", response_model=ReportTemplateSchema)
+async def load_report_endpoint(template_id: int, db: Session = Depends(get_db)):
+    """Loads a specific report template by its ID."""
+    logger.info(f"Loading report template with id {template_id}...")
+    template = load_report_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Report template not found")
+    return template
+
+@app.delete("/api/reports/delete/{template_id}")
+async def delete_report_endpoint(template_id: int, db: Session = Depends(get_db)):
+    """Deletes a report template by its ID."""
+    logger.info(f"Deleting report template with id {template_id}...")
+    success = delete_report_template(db, template_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Report template not found")
+    return {"status": "success", "id": template_id}
+
 
 if __name__ == "__main__":
     import uvicorn

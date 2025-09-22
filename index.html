@@ -795,6 +795,107 @@
             background: #fff;
         }
 
+        .reports-panel {
+            position: absolute;
+            right: 1rem;
+            top: 1rem;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 1rem;
+            max-height: 80vh;
+            overflow: auto;
+            width: 350px;
+            z-index: 160; /* Higher than other panels */
+            display: none;
+        }
+
+        .reports-panel.active {
+            display: block;
+        }
+
+        .report-list-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .report-list-item:hover {
+            background: var(--soft-purple);
+        }
+
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .report-name {
+            font-weight: bold;
+            color: var(--deep-purple);
+        }
+
+        .report-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .report-description {
+            font-size: 0.8rem;
+            color: var(--medium-gray);
+        }
+
+        /* --- Report Editor Styles --- */
+        .report-editor {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #f0f2f5;
+            z-index: 3000;
+            display: none;
+            flex-direction: column;
+        }
+
+        .report-editor.active {
+            display: flex;
+        }
+
+        .report-toolbar {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background: white;
+            box-shadow: var(--shadow);
+            gap: 1rem;
+        }
+
+        .report-canvas {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            padding: 1rem;
+            background-image:
+                linear-gradient(45deg, #e8e8e8 25%, transparent 25%),
+                linear-gradient(-45deg, #e8e8e8 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #e8e8e8 75%),
+                linear-gradient(-45deg, transparent 75%, #e8e8e8 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        .report-element {
+            position: absolute;
+            border: 1px dashed var(--medium-gray);
+            background: rgba(255, 255, 255, 0.8);
+            resize: both;
+            overflow: hidden;
+        }
+        .report-element:hover {
+            border-color: var(--primary-purple);
+        }
+
         @media (max-width: 768px) {
             .cell {
                 width: 80px;
@@ -864,6 +965,7 @@
                 <div class="toolbar-group">
                     <button id="functions-btn">fx Fonctions</button>
                     <button id="custom-functions-btn">⚙️ Fonctions personnalisées</button>
+                    <button id="reports-btn">📈 Rapports</button>
                     <button id="history-btn">⏳ Historique</button>
                 </div>
             </div>
@@ -906,6 +1008,19 @@
                     <button id="close-history" class="small">✕</button>
                 </div>
                 <div class="history-items" id="history-items"></div>
+            </div>
+
+            <div class="reports-panel" id="reports-panel">
+                <div class="panel-header">
+                    <h3>Gestionnaire de Rapports</h3>
+                    <button id="close-reports" class="small">✕</button>
+                </div>
+                <div class="panel-content">
+                    <button id="new-report-btn" class="primary small" style="margin-bottom: 1rem;">➕ Nouveau Rapport</button>
+                    <div id="report-list">
+                        <!-- La liste des rapports sera ajoutée ici -->
+                    </div>
+                </div>
             </div>
 
             <div class="custom-functions-panel" id="custom-functions-panel">
@@ -1325,6 +1440,62 @@
         </div>
     </div>
 
+    <div class="report-editor" id="report-editor">
+        <div class="report-toolbar">
+            <div class="form-group" style="margin-bottom: 0;">
+                <input type="text" id="report-name-input" placeholder="Nom du rapport" style="min-width: 300px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <input type="text" id="report-desc-input" placeholder="Description du rapport" style="min-width: 400px;">
+            </div>
+            <div class="toolbar-group">
+                <button id="add-report-element-btn" class="small primary">➕ Ajouter un Élément</button>
+                <button id="save-report-btn" class="small primary">💾 Sauvegarder</button>
+                <button id="export-report-pdf-btn" class="small">📄 Exporter PDF</button>
+            </div>
+            <button id="close-report-editor-btn" style="margin-left: auto;">Fermer</button>
+        </div>
+        <div class="report-canvas" id="report-canvas">
+            <!-- Les éléments du rapport seront ajoutés ici -->
+        </div>
+    </div>
+
+    <div class="modal" id="add-element-modal">
+        <div class="modal-content" style="width: 500px;">
+            <div class="modal-header">
+                <h2>Ajouter un Élément au Rapport</h2>
+                <button id="close-add-element-modal">✕</button>
+            </div>
+            <div class="form-group">
+                <label for="report-element-type">Type d'élément</label>
+                <select id="report-element-type">
+                    <option value="chart">Graphique</option>
+                    <option value="range">Plage de cellules</option>
+                    <option value="text">Texte statique</option>
+                </select>
+            </div>
+            <div id="element-options-chart" class="element-options">
+                <div class="form-group">
+                    <label for="chart-source-select">Choisir un graphique existant</label>
+                    <select id="chart-source-select"></select>
+                </div>
+            </div>
+            <div id="element-options-range" class="element-options" style="display: none;">
+                <div class="form-group">
+                    <label for="cell-range-input">Plage de cellules (ex: A1:D10)</label>
+                    <input type="text" id="cell-range-input" placeholder="A1:D10">
+                </div>
+            </div>
+            <div id="element-options-text" class="element-options" style="display: none;">
+                <div class="form-group">
+                    <label for="static-text-input">Contenu du texte</label>
+                    <textarea id="static-text-input"></textarea>
+                </div>
+            </div>
+            <button id="confirm-add-report-element" class="primary">Ajouter</button>
+        </div>
+    </div>
+
     <script>
         // Gestion des packages Python
         async function installPythonPackage(packageName) {
@@ -1472,6 +1643,7 @@
             // Charger les données depuis la base de données au démarrage
             loadSpreadsheet().then(() => {
                 loadCustomFunctions();
+                loadAndDisplayReports();
             });
 
 
@@ -1663,6 +1835,16 @@ end`,
                 document.getElementById('add-chart-btn').addEventListener('click', () => openModal('chart'));
                 document.getElementById('functions-btn').addEventListener('click', () => openModal('functions'));
                 document.getElementById('custom-functions-btn').addEventListener('click', toggleCustomFunctionsPanel);
+                document.getElementById('reports-btn').addEventListener('click', toggleReportsPanel);
+                document.getElementById('close-reports').addEventListener('click', toggleReportsPanel);
+                document.getElementById('new-report-btn').addEventListener('click', () => openReportEditor());
+                document.getElementById('close-report-editor-btn').addEventListener('click', closeReportEditor);
+                document.getElementById('add-report-element-btn').addEventListener('click', openAddElementModal);
+                document.getElementById('close-add-element-modal').addEventListener('click', () => document.getElementById('add-element-modal').classList.remove('active'));
+                document.getElementById('report-element-type').addEventListener('change', handleReportElementTypeChange);
+                document.getElementById('confirm-add-report-element').addEventListener('click', confirmAddReportElement);
+                document.getElementById('save-report-btn').addEventListener('click', saveReport);
+                document.getElementById('export-report-pdf-btn').addEventListener('click', () => exportToPDF('#report-canvas'));
                 document.getElementById('save-btn').addEventListener('click', saveSpreadsheet);
                 document.getElementById('load-btn').addEventListener('click', loadSpreadsheet);
                 document.getElementById('export-excel').addEventListener('click', exportToExcel);
@@ -1963,6 +2145,9 @@ end`,
                     cell.contentEditable = false;
                     isEditing = false;
                 }
+
+                // Notify that data has changed for live updates
+                document.dispatchEvent(new CustomEvent('spreadsheetDataChanged'));
             }
 
             function evaluateFormula(formula, currentCoords) {
@@ -3280,6 +3465,273 @@ end`,
                 }
             }
 
+            function toggleReportsPanel() {
+                const panel = document.getElementById('reports-panel');
+                panel.classList.toggle('active');
+            }
+
+            async function loadAndDisplayReports() {
+                try {
+                    const response = await fetch(`${CODE_SERVER_URL}/api/reports/list`);
+                    if (!response.ok) {
+                        throw new Error('Could not fetch reports.');
+                    }
+                    const reports = await response.json();
+                    const reportList = document.getElementById('report-list');
+                    reportList.innerHTML = ''; // Clear existing list
+
+                    if (reports.length === 0) {
+                        reportList.innerHTML = '<div style="text-align: center; padding: 1rem; color: #999;">Aucun rapport sauvegardé.</div>';
+                        return;
+                    }
+
+                    reports.forEach(report => {
+                        const item = document.createElement('div');
+                        item.className = 'report-list-item';
+                        item.innerHTML = `
+                            <div class="report-header">
+                                <span class="report-name">${report.name}</span>
+                                <div class="report-actions">
+                                    <button class="small" onclick="editReport(${report.id})">✏️</button>
+                                    <button class="small" onclick="deleteReport(${report.id})">🗑️</button>
+                                </div>
+                            </div>
+                            ${report.description ? `<div class="report-description">${report.description}</div>` : ''}
+                        `;
+                        reportList.appendChild(item);
+                    });
+                } catch (e) {
+                    console.error("Failed to load reports:", e);
+                    document.getElementById('report-list').innerHTML = '<div style="color:red;">Erreur de chargement des rapports.</div>';
+                }
+            }
+
+            async function deleteReport(templateId) {
+                if (!confirm('Voulez-vous vraiment supprimer ce modèle de rapport ?')) {
+                    return;
+                }
+                try {
+                    const response = await fetch(`${CODE_SERVER_URL}/api/reports/delete/${templateId}`, {
+                        method: 'DELETE'
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to delete report.');
+                    }
+                    await loadAndDisplayReports(); // Refresh the list
+                } catch (e) {
+                    console.error("Failed to delete report:", e);
+                    alert("Erreur lors de la suppression du rapport.");
+                }
+            }
+
+            async function editReport(templateId) {
+                try {
+                    const response = await fetch(`${CODE_SERVER_URL}/api/reports/load/${templateId}`);
+                    if (!response.ok) {
+                        throw new Error("Failed to load report template.");
+                    }
+                    const template = await response.json();
+                    openReportEditor(template);
+                } catch (e) {
+                    console.error("Error loading report for editing:", e);
+                    alert("Impossible de charger le modèle de rapport pour l'édition.");
+                }
+            }
+
+            function confirmAddReportElement() {
+                const type = document.getElementById('report-element-type').value;
+                let source;
+                if (type === 'chart') {
+                    source = document.getElementById('chart-source-select').value;
+                } else if (type === 'range') {
+                    source = document.getElementById('cell-range-input').value;
+                } else if (type === 'text') {
+                    source = document.getElementById('static-text-input').value;
+                }
+
+                if (!source) {
+                    alert("Veuillez sélectionner une source ou entrer une valeur.");
+                    return;
+                }
+
+                const elementData = {
+                    type: type,
+                    source: source,
+                    style: {
+                        top: '10px',
+                        left: '10px',
+                        width: '300px',
+                        height: '200px'
+                    }
+                };
+
+                renderReportElement(elementData);
+                document.getElementById('add-element-modal').classList.remove('active');
+            }
+
+            // --- Report Editor Logic ---
+            let currentReport = null; // To store the state of the report being edited
+
+            function openReportEditor(template = null) {
+                currentReport = template ? { ...template } : { id: null, name: '', description: '', layout: { elements: [] } };
+
+                document.getElementById('report-name-input').value = currentReport.name;
+                document.getElementById('report-desc-input').value = currentReport.description || '';
+
+                refreshReportCanvas();
+
+                document.getElementById('report-editor').classList.add('active');
+                document.addEventListener('spreadsheetDataChanged', refreshReportCanvas);
+            }
+
+            function closeReportEditor() {
+                if (confirm("Voulez-vous fermer l'éditeur ? Toutes les modifications non sauvegardées seront perdues.")) {
+                    document.getElementById('report-editor').classList.remove('active');
+                    document.removeEventListener('spreadsheetDataChanged', refreshReportCanvas);
+                    currentReport = null;
+                }
+            }
+
+            function refreshReportCanvas() {
+                if (!currentReport) return;
+                const canvas = document.getElementById('report-canvas');
+                canvas.innerHTML = ''; // Clear canvas
+                if (currentReport.layout && currentReport.layout.elements) {
+                    currentReport.layout.elements.forEach(renderReportElement);
+                }
+            }
+
+            function openAddElementModal() {
+                // Populate chart dropdown
+                const chartSelect = document.getElementById('chart-source-select');
+                chartSelect.innerHTML = '';
+                document.querySelectorAll('.graphic-element').forEach(el => {
+                    const chartInstance = Chart.getChart(el.querySelector('canvas'));
+                    if (chartInstance) {
+                        const option = document.createElement('option');
+                        option.value = el.id;
+                        option.textContent = chartInstance.options.plugins.title.text || `Graphique (ID: ${el.id})`;
+                        chartSelect.appendChild(option);
+                    }
+                });
+                document.getElementById('add-element-modal').classList.add('active');
+            }
+
+            function handleReportElementTypeChange() {
+                const type = document.getElementById('report-element-type').value;
+                document.querySelectorAll('.element-options').forEach(el => el.style.display = 'none');
+                document.getElementById(`element-options-${type}`).style.display = 'block';
+            }
+
+            function renderReportElement(elementData) {
+                const canvas = document.getElementById('report-canvas');
+                const el = document.createElement('div');
+                el.className = 'report-element';
+                el.style.left = elementData.style.left;
+                el.style.top = elementData.style.top;
+                el.style.width = elementData.style.width;
+                el.style.height = elementData.style.height;
+                el.dataset.source = elementData.source;
+                el.dataset.type = elementData.type;
+
+                if (elementData.type === 'chart') {
+                    const sourceChart = document.getElementById(elementData.source);
+                    if (sourceChart) {
+                        const sourceCanvas = sourceChart.querySelector('canvas');
+                        const chartInstance = Chart.getChart(sourceCanvas);
+                        const newCanvas = document.createElement('canvas');
+                        el.appendChild(newCanvas);
+                        createChart(newCanvas, chartInstance.config.type, chartInstance.options.plugins.title.text, sourceChart.dataset.dataRange, chartInstance.options.plugins.legend.display, sourceChart.dataset.colorScheme);
+                    }
+                } else if (elementData.type === 'range') {
+                    el.innerHTML = ''; // Clear placeholder
+                    const table = document.createElement('table');
+                    table.className = 'spreadsheet'; // Reuse spreadsheet styles
+
+                    const range = elementData.source;
+                    const [start, end] = range.split(':');
+                    const startMatch = start.match(/([A-Z]+)([0-9]+)/);
+                    const endMatch = end.match(/([A-Z]+)([0-9]+)/);
+
+                    if (startMatch && endMatch) {
+                        const startCol = colLabelToIndex(startMatch[1]);
+                        const startRow = parseInt(startMatch[2]) - 1;
+                        const endCol = colLabelToIndex(endMatch[1]);
+                        const endRow = parseInt(endMatch[2]) - 1;
+
+                        for (let r = startRow; r <= endRow; r++) {
+                            const tr = document.createElement('tr');
+                            for (let c = startCol; c <= endCol; c++) {
+                                const sourceCell = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+                                const td = document.createElement('td');
+                                td.className = 'cell';
+                                td.textContent = sourceCell ? sourceCell.textContent : '';
+                                tr.appendChild(td);
+                            }
+                            table.appendChild(tr);
+                        }
+                    }
+                    el.appendChild(table);
+                } else if (elementData.type === 'text') {
+                    el.innerHTML = `<div>${elementData.source}</div>`;
+                }
+
+                canvas.appendChild(el);
+                makeDraggable(el); // Reuse draggable logic
+            }
+
+            async function saveReport() {
+                if (!currentReport) return;
+
+                const name = document.getElementById('report-name-input').value;
+                const description = document.getElementById('report-desc-input').value;
+
+                if (!name) {
+                    alert("Le nom du rapport est requis.");
+                    return;
+                }
+
+                // Update currentReport object
+                currentReport.name = name;
+                currentReport.description = description;
+                currentReport.layout.elements = [];
+
+                document.querySelectorAll('#report-canvas .report-element').forEach(el => {
+                    currentReport.layout.elements.push({
+                        type: el.dataset.type,
+                        source: el.dataset.source,
+                        style: {
+                            left: el.style.left,
+                            top: el.style.top,
+                            width: el.style.width,
+                            height: el.style.height
+                        }
+                    });
+                });
+
+                try {
+                    const response = await fetch(`${CODE_SERVER_URL}/api/reports/save`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(currentReport)
+                    });
+                    if (!response.ok) {
+                        throw new Error("Failed to save the report.");
+                    }
+                    alert("Rapport sauvegardé avec succès !");
+                    await loadAndDisplayReports();
+                    closeReportEditor();
+                } catch(e) {
+                    console.error("Error saving report:", e);
+                    alert("Erreur lors de la sauvegarde du rapport.");
+                }
+            }
+
+
+            // Make editReport and deleteReport globally accessible
+            window.editReport = editReport;
+            window.deleteReport = deleteReport;
+
             function newCustomFunction() {
                 document.getElementById('function-editor-container').style.display = 'block';
                 document.getElementById('function-list-container').style.display = 'none';
@@ -4038,9 +4490,13 @@ function NOUVELLE_FONCTION(...args) {
             }
 
 
-            function exportToPDF() {
+            function exportToPDF(targetSelector = '.spreadsheet-container') {
                 const { jsPDF } = window.jspdf;
-                const spreadsheetContainer = document.querySelector('.spreadsheet-container');
+                const targetElement = document.querySelector(targetSelector);
+                if (!targetElement) {
+                    console.error("PDF export target not found:", targetSelector);
+                    return;
+                }
 
                 // Temporarily remove selection before capture
                 if (currentCell) {
@@ -4050,7 +4506,7 @@ function NOUVELLE_FONCTION(...args) {
                 console.log('Génération du PDF...');
                 alert('La génération du PDF a commencé. Cela peut prendre quelques instants...');
 
-                html2canvas(spreadsheetContainer, {
+                html2canvas(targetElement, {
                     scale: 2, // Augmenter la résolution pour une meilleure qualité
                     useCORS: true, // Pour les images externes si nécessaire
                     logging: true

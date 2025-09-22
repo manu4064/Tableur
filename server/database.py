@@ -40,6 +40,20 @@ class CustomFunction(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class ReportTemplate(Base):
+    """
+    Represents a user-defined report template. The layout field stores the
+    positions and configurations of charts and cell ranges.
+    """
+    __tablename__ = "report_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    description = Column(String, nullable=True)
+    layout = Column(JSON, nullable=False) # Stores positions of elements
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 # --- Database Initialization ---
 
 def create_db_and_tables():
@@ -120,6 +134,51 @@ def delete_custom_function(db, name: str):
     func = db.query(CustomFunction).filter(CustomFunction.name == name).first()
     if func:
         db.delete(func)
+        db.commit()
+        return True
+    return False
+
+# --- Report Template CRUD ---
+
+def save_report_template(db, name: str, description: str, layout: dict):
+    """
+    Saves or updates a report template.
+    """
+    template = db.query(ReportTemplate).filter(ReportTemplate.name == name).first()
+    if template:
+        template.description = description
+        template.layout = layout
+        template.updated_at = datetime.utcnow()
+    else:
+        template = ReportTemplate(
+            name=name,
+            description=description,
+            layout=layout
+        )
+        db.add(template)
+    db.commit()
+    db.refresh(template)
+    return template
+
+def list_report_templates(db):
+    """
+    Returns a list of all report templates.
+    """
+    return db.query(ReportTemplate).all()
+
+def load_report_template(db, template_id: int):
+    """
+    Loads a single report template by its ID.
+    """
+    return db.query(ReportTemplate).filter(ReportTemplate.id == template_id).first()
+
+def delete_report_template(db, template_id: int):
+    """
+    Deletes a report template by its ID.
+    """
+    template = db.query(ReportTemplate).filter(ReportTemplate.id == template_id).first()
+    if template:
+        db.delete(template)
         db.commit()
         return True
     return False
