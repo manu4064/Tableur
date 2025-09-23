@@ -12,13 +12,24 @@ import shutil
 logger = logging.getLogger(__name__)
 
 class Language(str, Enum):
+    """Enumeration for the supported programming languages."""
     PYTHON = "python"
     JAVASCRIPT = "javascript"
     LUA = "lua"
     C = "c"
 
 class CodeExecutor:
+    """
+    Handles the secure execution of code in isolated Docker containers.
+
+    This class manages Docker images for different languages, and provides
+    a unified interface to run code snippets with arguments.
+    """
     def __init__(self):
+        """
+        Initializes the CodeExecutor, connects to the Docker daemon,
+        and ensures all necessary Docker images are built.
+        """
         try:
             self.client = docker.from_env()
         except docker.errors.DockerException:
@@ -61,7 +72,25 @@ class CodeExecutor:
                     raise
 
     async def _execute_in_container(self, language: Language, code: str, args: list, code_filename: str) -> Any:
-        """Core logic to execute code in a sandboxed Docker container."""
+        """
+        Core logic to execute code in a sandboxed Docker container.
+
+        This method creates a temporary directory, writes the code and arguments to
+        files, runs a container with the appropriate image, and captures the
+        output.
+
+        Args:
+            language: The programming language to execute.
+            code: The source code to execute.
+            args: A list of arguments to pass to the code.
+            code_filename: The name of the file to create for the source code.
+
+        Returns:
+            The result of the code execution, parsed from JSON output.
+
+        Raises:
+            RuntimeError: If Docker is unavailable, execution fails, or output is invalid.
+        """
         if not self.client:
             raise RuntimeError("Docker is not available. Cannot execute code.")
 
@@ -117,8 +146,19 @@ class CodeExecutor:
 
     async def execute(self, language: Language, code: str, args: list) -> Any:
         """
-        Executes code in the specified language, handling language-specific
-        setup like C code wrapping. In a testing environment, it returns a mock result.
+        Executes code in a specified language.
+
+        This is the main public method for code execution. It handles language-specific
+        setups (like C code wrapping) and manages a mock execution mode for testing
+        environments where Docker may not be available.
+
+        Args:
+            language: The programming language of the code.
+            code: The source code snippet to execute.
+            args: A list of arguments to be passed to the code.
+
+        Returns:
+            The result of the execution.
         """
         # --- Mock execution for testing environments without Docker ---
         if os.environ.get("TESTING"):

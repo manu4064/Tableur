@@ -30,6 +30,7 @@ Base.metadata.create_all(bind=engine)
 
 @app.teardown_appcontext
 def shutdown_session(exception=None):
+    """Closes the database session at the end of the request."""
     Session.remove()
 
 # --- Code Executor ---
@@ -46,13 +47,21 @@ def home():
     return render_template('home.html', spreadsheets=spreadsheets)
 
 @app.route('/spreadsheet/<string:name>')
-def spreadsheet_view(name):
-    """Renders the main spreadsheet editor view."""
+def spreadsheet_view(name: str):
+    """
+    Renders the main spreadsheet editor view for a given spreadsheet.
+
+    Args:
+        name (str): The name of the spreadsheet to render.
+    """
     return render_template('spreadsheet.html', spreadsheet_name=name)
 
 @app.route('/spreadsheet', methods=['POST'])
 def create_spreadsheet_post():
-    """Handles the creation of a new spreadsheet."""
+    """
+    Handles the creation of a new spreadsheet from the homepage form.
+    Expects 'spreadsheet_name' in the form data.
+    """
     db_session = Session()
     name = request.form.get('spreadsheet_name')
     if not name:
@@ -69,7 +78,10 @@ def create_spreadsheet_post():
 
 @app.route("/execute", methods=['POST'])
 def execute_code_route():
-    """Executes code in a specified language."""
+    """
+    API endpoint to execute a block of code in a specified language.
+    Expects a JSON payload with 'language', 'code', and 'args'.
+    """
     req_data = request.get_json()
     try:
         import asyncio
@@ -85,19 +97,32 @@ def execute_code_route():
 
 @app.route('/api/spreadsheets', methods=['GET'])
 def get_spreadsheets_api():
+    """API endpoint to list all available spreadsheets."""
     db_session = Session()
     spreadsheets = list_spreadsheets(db_session)
     return jsonify([{"name": s.name, "updated_at": s.updated_at.isoformat()} for s in spreadsheets])
 
 @app.route('/api/spreadsheets/<string:name>', methods=['POST'])
-def save_spreadsheet_api(name):
+def save_spreadsheet_api(name: str):
+    """
+    API endpoint to save the data for a specific spreadsheet.
+
+    Args:
+        name (str): The name of the spreadsheet to save.
+    """
     db_session = Session()
     data = request.get_json()
     save_spreadsheet(db_session, name=name, data=data)
     return jsonify({"status": "success", "name": name})
 
 @app.route('/api/spreadsheets/<string:name>', methods=['GET'])
-def load_spreadsheet_api(name):
+def load_spreadsheet_api(name: str):
+    """
+    API endpoint to load the data for a specific spreadsheet.
+
+    Args:
+        name (str): The name of the spreadsheet to load.
+    """
     db_session = Session()
     spreadsheet = load_spreadsheet(db_session, name)
     if not spreadsheet:
@@ -106,19 +131,27 @@ def load_spreadsheet_api(name):
 
 @app.route('/api/functions/list', methods=['GET'])
 def list_functions_api():
+    """API endpoint to list all saved custom functions."""
     db_session = Session()
     functions = list_custom_functions(db_session)
     return jsonify([{"name": f.name, "description": f.description, "language": f.language, "code": f.code} for f in functions])
 
 @app.route('/api/functions/save', methods=['POST'])
 def save_function_api():
+    """API endpoint to save a new custom function."""
     db_session = Session()
     data = request.get_json()
     save_custom_function(db_session, name=data['name'], description=data.get('description'), language=data['language'], code=data['code'])
     return jsonify({"status": "success", "name": data['name']})
 
 @app.route('/api/functions/delete/<string:name>', methods=['DELETE'])
-def delete_function_api(name):
+def delete_function_api(name: str):
+    """
+    API endpoint to delete a custom function.
+
+    Args:
+        name (str): The name of the function to delete.
+    """
     db_session = Session()
     success = delete_custom_function(db_session, name)
     if not success:
@@ -127,19 +160,27 @@ def delete_function_api(name):
 
 @app.route('/api/reports/list', methods=['GET'])
 def list_reports_api():
+    """API endpoint to list all saved report templates."""
     db_session = Session()
     templates = list_report_templates(db_session)
     return jsonify([{"id": t.id, "name": t.name, "description": t.description, "layout": t.layout} for t in templates])
 
 @app.route('/api/reports/save', methods=['POST'])
 def save_report_api():
+    """API endpoint to save a new report template."""
     db_session = Session()
     data = request.get_json()
     save_report_template(db_session, name=data['name'], description=data.get('description'), layout=data['layout'])
     return jsonify({"status": "success", "name": data['name']})
 
 @app.route('/api/reports/load/<int:template_id>', methods=['GET'])
-def load_report_api(template_id):
+def load_report_api(template_id: int):
+    """
+    API endpoint to load a specific report template.
+
+    Args:
+        template_id (int): The ID of the report template to load.
+    """
     db_session = Session()
     template = load_report_template(db_session, template_id)
     if not template:
@@ -147,7 +188,13 @@ def load_report_api(template_id):
     return jsonify({"id": template.id, "name": template.name, "description": template.description, "layout": template.layout})
 
 @app.route('/api/reports/delete/<int:template_id>', methods=['DELETE'])
-def delete_report_api(template_id):
+def delete_report_api(template_id: int):
+    """
+    API endpoint to delete a report template.
+
+    Args:
+        template_id (int): The ID of the report template to delete.
+    """
     db_session = Session()
     success = delete_report_template(db_session, template_id)
     if not success:

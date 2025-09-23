@@ -1,72 +1,14 @@
-// Gestion des packages Python
-async function installPythonPackage(packageName) {
-    try {
-        if (!window.pyodide) {
-            await initLanguageRuntimes();
-        }
-
-        if (!window.pyodide || !window.pyodide.loadPackage) {
-            throw new Error('Pyodide n\'est pas correctement initialisé');
-        }
-
-        console.log(`Installation du package ${packageName}...`);
-        await window.pyodide.loadPackage(packageName);
-        console.log(`Package ${packageName} installé avec succès`);
-        return true;
-    } catch (e) {
-        console.error(`Erreur lors de l'installation du package ${packageName}:`, e);
-        return false;
-    }
-}
-
-async function listInstalledPythonPackages() {
-    if (!window.pyodide) return [];
-
-    try {
-        const packages = await window.pyodide.runPythonAsync(`
-            import pkg_resources
-            sorted([dist.project_name + ' ' + dist.version for dist in pkg_resources.working_set])
-        `);
-        return packages.toJs();
-    } catch (e) {
-        console.error('Erreur lors de la liste des packages:', e);
-        return [];
-    }
-}
-
-// Fonction pour initialiser les runtimes des langages
-async function initLanguageRuntimes() {
-    try {
-        // Initialiser Pyodide si nécessaire
-        if (!window.pyodide) {
-            console.log('Initialisation de Pyodide...');
-            if (!window.pyodideLoading) {
-                window.pyodideLoading = loadPyodide({
-                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/"
-                });
-            }
-            window.pyodide = await window.pyodideLoading;
-            console.log('Pyodide chargé, chargement des packages...');
-            await window.pyodide.loadPackage(['numpy', 'pandas']);
-            console.log('Packages Pyodide chargés avec succès');
-        }
-
-        // Initialiser Fengari (Lua) si nécessaire
-        if (!window.fengari && typeof fengari !== 'undefined') {
-            window.fengari = fengari;
-        }
-
-        return true;
-    } catch (e) {
-        console.error('Erreur lors de l\'initialisation des runtimes:', e);
-        return false;
-    }
-}
 
 // Configuration du serveur de code
 const CODE_SERVER_URL = 'http://localhost:8000';
 
-// Fonction générique pour exécuter du code dans n'importe quel langage via le serveur
+/**
+ * Exécute un bloc de code sur le serveur backend via une requête API.
+ * @param {string} code - Le code source à exécuter.
+ * @param {Array<any>} args - Une liste d'arguments à passer au code.
+ * @param {string} language - Le langage de programmation ('python', 'javascript', etc.).
+ * @returns {Promise<any>} Le résultat de l'exécution du code.
+ */
 async function executeCode(code, args, language) {
     try {
         const response = await fetch(`${CODE_SERVER_URL}/execute`, {
@@ -110,7 +52,7 @@ async function executeCode(code, args, language) {
 
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Variables globales
+    // --- Variables Globales ---
     const spreadsheet = document.getElementById('spreadsheet');
     let initialRows = 100;
     let initialCols = 26;
@@ -131,22 +73,20 @@ document.addEventListener('DOMContentLoaded', function() {
     let dataImporters = {}; // Pour stocker les importateurs de données en cours
     let lastIncrementalRow = {}; // Pour suivre la dernière ligne utilisée dans les imports incrémentiels
 
-    // Runtimes pour les différents langages
-    window.pyodideLoading = null;
-    window.pyodide = null;
-    window.fengari = null;
-
-    // Initialisation du tableur
+    // --- Initialisation ---
     initSpreadsheet();
     setupEventListeners();
     initFunctionEditor();
 
     // Charger les données depuis la base de données au démarrage
-            loadSpreadsheet();
-            loadCustomFunctions();
-            loadAndDisplayReports();
+    loadSpreadsheet();
+    loadCustomFunctions();
+    loadAndDisplayReports();
 
 
+    /**
+     * Initialise la grille du tableur en créant les en-têtes et les cellules.
+     */
     function initSpreadsheet() {
         const thead = spreadsheet.querySelector('thead tr');
         const tbody = spreadsheet.querySelector('tbody');
@@ -169,6 +109,11 @@ document.addEventListener('DOMContentLoaded', function() {
         thead.appendChild(th);
     }
 
+    /**
+     * Convertit un index de colonne (0-based) en son étiquette alphabétique (A, B, ..., Z, AA, ...).
+     * @param {number} index - L'index de la colonne.
+     * @returns {string} L'étiquette de la colonne.
+     */
     function getColumnLabel(index) {
         let label = '';
         while (index >= 0) {
@@ -240,8 +185,10 @@ document.addEventListener('DOMContentLoaded', function() {
         initialRows = currentRows + numRows;
     }
 
+    /**
+     * Initialise l'éditeur de code ACE pour l'édition de fonctions personnalisées.
+     */
     function initFunctionEditor() {
-        // Initialiser l'éditeur ACE
         functionEditor = ace.edit("function-code-editor");
         functionEditor.setTheme(`ace/theme/${currentEditorTheme}`);
         functionEditor.session.setMode("ace/mode/javascript");
@@ -324,8 +271,10 @@ return args[0];
         });
     }
 
+    /**
+     * Met en place tous les écouteurs d'événements pour les éléments de l'interface utilisateur.
+     */
     function setupEventListeners() {
-        // Barre de formule
         const formulaInput = document.getElementById('formula-input');
         formulaInput.addEventListener('keydown', handleFormulaInput);
         formulaInput.addEventListener('blur', saveCellContentFromInput);
@@ -545,10 +494,13 @@ return args[0];
         });
     }
 
+    /**
+     * Gère la sélection d'une cellule. Met à jour l'affichage de la cellule active et la barre de formule.
+     * @param {Event} e - L'événement de clic.
+     */
     function selectCell(e) {
         if (isEditing) return;
 
-        // Désélectionner la cellule actuelle
         if (currentCell) {
             saveCellContentFromInput();
             currentCell.classList.remove('selected');
@@ -565,6 +517,10 @@ return args[0];
         updateFormatButtons();
     }
 
+    /**
+     * Active le mode d'édition pour une cellule lorsqu'elle est double-cliquée.
+     * @param {Event} e - L'événement de double-clic.
+     */
     function startEditing(e) {
         if (isEditing) return;
 
@@ -583,10 +539,10 @@ return args[0];
         selection.addRange(range);
     }
 
-    function handleFormulaInput(e) {
+    async function handleFormulaInput(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
-            saveCellContentFromInput();
+            await saveCellContentFromInput();
             currentCell.blur();
         } else if (e.key === 'Escape') {
             e.preventDefault();
@@ -594,27 +550,32 @@ return args[0];
             currentCell.blur();
         } else if (e.key === 'Tab') {
             e.preventDefault();
+            await saveCellContentFromInput();
             moveToNextCell(e.shiftKey ? -1 : 1);
         }
     }
 
-    function saveCellContentFromInput() {
+    async function saveCellContentFromInput() {
         if (currentCell) {
             const value = document.getElementById('formula-input').value;
             if (value !== (currentCell.dataset.formula || currentCell.textContent)) {
-                saveCellContent(currentCell, value);
+                await saveCellContent(currentCell, value);
             }
         }
     }
 
-    function saveCellContent(cell, value) {
+    /**
+     * Sauvegarde le contenu d'une cellule, évalue les formules et met à jour l'historique.
+     * @param {HTMLElement} cell - L'élément TD de la cellule à sauvegarder.
+     * @param {string} value - La nouvelle valeur ou formule pour la cellule.
+     */
+    async function saveCellContent(cell, value) {
         if (value === undefined) return;
 
         const oldValue = cell.dataset.formula || cell.textContent;
         const oldStyle = getCellStyle(cell);
 
         if (value !== oldValue) {
-            // Sauvegarder dans l'historique avant modification
             saveToHistory({
                 type: 'cell_content',
                 cell: cell.dataset.coords,
@@ -627,11 +588,11 @@ return args[0];
 
         if (value && value.startsWith('=')) {
             try {
-                const result = evaluateFormula(value.substring(1), cell.dataset.coords);
+                const result = await evaluateFormula(value.substring(1), new Set([cell.dataset.coords]));
                 cell.textContent = result;
                 cell.dataset.formula = value;
             } catch (e) {
-                cell.textContent = '#ERREUR';
+                cell.textContent = e.message.startsWith('#') ? e.message : '#ERREUR';
                 cell.dataset.formula = value;
                 console.error('Erreur dans la formule:', e);
             }
@@ -646,211 +607,130 @@ return args[0];
             isEditing = false;
         }
 
-        // Notify that data has changed for live updates
         document.dispatchEvent(new CustomEvent('spreadsheetDataChanged'));
+        await recalculateAllFormulas();
     }
 
-    function evaluateFormula(formula, currentCoords) {
-        // Remplacer les références de cellules par leurs valeurs
+    /**
+     * Évalue une formule de manière asynchrone.
+     * Gère les fonctions personnalisées (via API), les références de cellules et les fonctions standard.
+     * @param {string} formula - La chaîne de la formule à évaluer (sans le '=').
+     * @param {Set<string>} visited - Un ensemble de coordonnées de cellules déjà visitées pour détecter les références circulaires.
+     * @returns {Promise<any>} Le résultat calculé de la formule.
+     */
+    async function evaluateFormula(formula, visited = new Set()) {
+        const customFuncRegex = new RegExp(`\\b(${Object.keys(customFunctions).join('|')})\\s*\\(`, 'gi');
+        let processedFormula = formula;
+
+        const matches = [...formula.matchAll(customFuncRegex)];
+        for (const match of matches) {
+            const funcName = match[1].toUpperCase();
+            const funcData = customFunctions[funcName];
+            if (!funcData) continue;
+
+            const startIndex = match.index + match[0].length;
+            const argsString = getMatchingBracket(formula, startIndex);
+
+            // Evaluate arguments first
+            const args = await Promise.all(
+                splitArgs(argsString).map(arg => evaluateFormula(arg, new Set(visited)))
+            );
+
+            // Execute the function on the backend
+            const result = await executeCode(funcData.code, args, funcData.language);
+
+            // Replace the function call with the result
+            const originalCall = `${match[0]}${argsString})`;
+            processedFormula = processedFormula.replace(originalCall, JSON.stringify(result));
+        }
+
+        // 2. Handle cell references
         const cellRefRegex = /([A-Z]+[0-9]+)/g;
-        let matches;
-        let modifiedFormula = formula;
-
-        while ((matches = cellRefRegex.exec(formula)) !== null) {
-            const ref = matches[0];
-            if (ref !== currentCoords) { // Éviter la récursion infinie
-                const cell = document.querySelector(`.cell[data-coords="${ref}"]`);
-                if (cell) {
-                    const cellValue = cell.dataset.formula
-                        ? evaluateFormula(cell.dataset.formula.substring(1), ref)
-                        : cell.textContent;
-                    modifiedFormula = modifiedFormula.replace(ref, cellValue || '0');
-                }
+        processedFormula = await replaceAsync(processedFormula, cellRefRegex, async (match) => {
+            const ref = match[0];
+            if (visited.has(ref)) {
+                throw new Error('#REF! Erreur de dépendance circulaire');
             }
-        }
-
-        // Remplacer les fonctions standard par leurs équivalents JS
-        modifiedFormula = modifiedFormula
-            .replace(/SOMME\s*\(/gi, 'sum(')
-            .replace(/MOYENNE\s*\(/gi, 'avg(')
-            .replace(/MAX\s*\(/gi, 'max(')
-            .replace(/MIN\s*\(/gi, 'min(')
-            .replace(/PUISSANCE\s*\(/gi, 'pow(')
-            .replace(/RACINE\s*\(/gi, 'sqrt(')
-            .replace(/ARRONDI\s*\(/gi, 'round(')
-            .replace(/ABS\s*\(/gi, 'abs(')
-            .replace(/EXP\s*\(/gi, 'exp(')
-            .replace(/LN\s*\(/gi, 'log(')
-            .replace(/LOG\s*\(/gi, 'log10(')
-            .replace(/SIN\s*\(/gi, 'sin(')
-            .replace(/COS\s*\(/gi, 'cos(')
-            .replace(/TAN\s*\(/gi, 'tan(')
-            .replace(/PI\s*\(/gi, 'PI')
-            .replace(/ALEA\s*\(/gi, 'random(')
-            .replace(/NOW\s*\(/gi, 'Date.now(')
-            .replace(/AUJOURDHUI\s*\(/gi, 'new Date().getTime(')
-            .replace(/CONCATENER\s*\(/gi, 'concat(')
-            .replace(/GAUCHE\s*\(/gi, 'left(')
-            .replace(/DROITE\s*\(/gi, 'right(')
-            .replace(/LONGUEUR\s*\(/gi, 'length(');
-
-        // Remplacer les fonctions personnalisées
-        for (const funcName in customFunctions) {
-            const regex = new RegExp(`\\b${funcName}\\s*\\(`, 'gi');
-            modifiedFormula = modifiedFormula.replace(regex, `${funcName}_custom(`);
-        }
-
-        // Remplacer les points-virgules par des virgules pour les arguments de fonction
-        modifiedFormula = modifiedFormula.replace(/;/g, ',');
-
-        // Créer des fonctions standard
-        window.sum = (...args) => args.reduce((a, b) => a + parseFloat(b || 0), 0);
-        window.avg = (...args) => sum(...args) / args.length;
-        window.max = (...args) => Math.max(...args.map(a => parseFloat(a || 0)));
-        window.min = (...args) => Math.min(...args.map(a => parseFloat(a || 0)));
-        window.pow = (base, exponent) => Math.pow(parseFloat(base || 0), parseFloat(exponent || 0));
-        window.sqrt = (num) => Math.sqrt(parseFloat(num || 0));
-        window.round = (num, decimals) => {
-            const n = parseFloat(num || 0);
-            const d = parseInt(decimals || 0);
-            return d ? n.toFixed(d) : Math.round(n);
-        };
-        window.abs = (num) => Math.abs(parseFloat(num || 0));
-        window.exp = (num) => Math.exp(parseFloat(num || 0));
-        window.log = (num, base) => {
-            const n = parseFloat(num || 0);
-            const b = parseFloat(base || 10);
-            return Math.log(n) / Math.log(b);
-        };
-        window.log10 = (num) => Math.log10(parseFloat(num || 0));
-        window.sin = (num) => Math.sin(parseFloat(num || 0));
-        window.cos = (num) => Math.cos(parseFloat(num || 0));
-        window.tan = (num) => Math.tan(parseFloat(num || 0));
-        window.PI = Math.PI;
-        window.random = () => Math.random();
-        window.concat = (...args) => args.join('');
-        window.left = (str, num) => {
-            const s = str || '';
-            const n = parseInt(num || 0);
-            return s.substring(0, n);
-        };
-        window.right = (str, num) => {
-            const s = str || '';
-            const n = parseInt(num || 0);
-            return s.substring(s.length - n);
-        };
-        window.length = (str) => (str || '').length;
-
-        // Créer des fonctions utilitaires pour les fonctions personnalisées
-        window.getCellValue = (ref) => {
             const cell = document.querySelector(`.cell[data-coords="${ref}"]`);
             if (cell) {
-                return cell.dataset.formula
-                    ? evaluateFormula(cell.dataset.formula.substring(1), ref)
-                    : parseFloat(cell.textContent) || cell.textContent || 0;
+                const cellValue = cell.dataset.formula
+                    ? await evaluateFormula(cell.dataset.formula.substring(1), new Set(visited).add(ref))
+                    : cell.textContent;
+                return cellValue || '0';
             }
-            return 0;
-        };
+            return '0'; // Cell not found
+        });
 
-        window.getRangeSum = (range) => {
-            const [start, end] = range.split(':');
-            const startMatch = start.match(/([A-Z]+)([0-9]+)/);
-            const endMatch = end.match(/([A-Z]+)([0-9]+)/);
-
-            if (!startMatch || !endMatch) return 0;
-
-            const startCol = startMatch[1].charCodeAt(0) - 65;
-            const startRow = parseInt(startMatch[2]) - 1;
-            const endCol = endMatch[1].charCodeAt(0) - 65;
-            const endRow = parseInt(endMatch[2]) - 1;
-
-            let total = 0;
-            for (let col = startCol; col <= endCol; col++) {
-                for (let row = startRow; row <= endRow; row++) {
-                    const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
-                    if (cell) {
-                        const value = cell.dataset.formula
-                            ? evaluateFormula(cell.dataset.formula.substring(1), cell.dataset.coords)
-                            : parseFloat(cell.textContent) || 0;
-                        total += value;
-                    }
-                }
-            }
-            return total;
-        };
-
-        // Créer les fonctions personnalisées
-        for (const funcName in customFunctions) {
-            const func = customFunctions[funcName];
-            window[`${funcName}_custom`] = function(...args) {
-                try {
-                                // Créer une fonction à partir du code personnalisé
-                    // Inclure toutes les fonctions nécessaires dans le scope
-                    const funcBody = `
-                        const sum = (...args) => args.reduce((a, b) => a + parseFloat(b || 0), 0);
-                        const avg = (...args) => sum(...args) / args.length;
-                        const max = (...args) => Math.max(...args.map(a => parseFloat(a || 0)));
-                        const min = (...args) => Math.min(...args.map(a => parseFloat(a || 0)));
-                        const pow = (base, exponent) => Math.pow(parseFloat(base || 0), parseFloat(exponent || 0));
-                        const sqrt = (num) => Math.sqrt(parseFloat(num || 0));
-                        const round = (num, decimals) => {
-                            const n = parseFloat(num || 0);
-                            const d = parseInt(decimals || 0);
-                            return d ? Number(n.toFixed(d)) : Math.round(n);
-                        };
-                        const abs = (num) => Math.abs(parseFloat(num || 0));
-                        const exp = (num) => Math.exp(parseFloat(num || 0));
-                        const log = (num) => Math.log(parseFloat(num || 0));
-                        const log10 = (num) => Math.log10(parseFloat(num || 0));
-                        const sin = (num) => Math.sin(parseFloat(num || 0));
-                        const cos = (num) => Math.cos(parseFloat(num || 0));
-                        const tan = (num) => Math.tan(parseFloat(num || 0));
-                        const PI = Math.PI;
-                        const random = () => Math.random();
-                        const concat = (...args) => args.join('');
-                        const left = (str, num) => {
-                            const s = str || '';
-                            const n = parseInt(num || 0);
-                            return s.substring(0, n);
-                        };
-                        const right = (str, num) => {
-                            const s = str || '';
-                            const n = parseInt(num || 0);
-                            return s.substring(s.length - n);
-                        };
-                        const length = (str) => (str || '').length;
-                        ${func.code}
-                        return ${funcName}(...arguments);
-                    `;
-                    const funcArgs = func.params.split(',').map(p => p.trim()).filter(p => p);
-                    return new Function(...funcArgs, funcBody)(...args);
-                } catch (e) {
-                    console.error(`Erreur dans la fonction personnalisée ${funcName}:`, e);
-                    return '#ERREUR';
-                }
-            };
-        }
-
+        // 3. Evaluate the final expression (synchronous part)
         try {
-            // Évaluer la formule en créant une nouvelle fonction avec les fonctions dans le scope
-            return new Function(
-                'sum', 'avg', 'max', 'min', 'pow', 'sqrt', 'round',
-                'abs', 'exp', 'log', 'log10', 'sin', 'cos', 'tan',
-                'PI', 'random', 'concat', 'left', 'right', 'length',
-                'getCellValue', 'getRangeSum',
-                ...Object.keys(customFunctions).map(f => `${f}_custom`),
-                `return ${modifiedFormula}`
-            )(
-                sum, avg, max, min, pow, sqrt, round,
-                abs, exp, log, log10, sin, cos, tan,
-                PI, random, concat, left, right, length,
-                getCellValue, getRangeSum,
-                ...Object.keys(customFunctions).map(f => window[`${f}_custom`])
+            // Replace standard functions
+            let finalFormula = processedFormula
+                .replace(/;/g, ',') // Use comma as separator
+                .replace(/SOMME\s*\(/gi, 'sum(')
+                .replace(/MOYENNE\s*\(/gi, 'avg(')
+                .replace(/MAX\s*\(/gi, 'max(')
+                .replace(/MIN\s*\(/gi, 'min(')
+                // Add other standard functions here...
+                .replace(/PI\s*\(\)/gi, 'Math.PI');
+
+            // Create a safe evaluation scope
+            const evaluateInScope = new Function(
+                'sum', 'avg', 'max', 'min',
+                `return ${finalFormula}`
+            );
+
+            return evaluateInScope(
+                (...args) => args.reduce((a, b) => a + Number(b || 0), 0),
+                (...args) => args.reduce((a, b) => a + Number(b || 0), 0) / args.length,
+                (...args) => Math.max(...args.map(a => Number(a || 0))),
+                (...args) => Math.min(...args.map(a => Number(a || 0)))
             );
         } catch (e) {
-            console.error('Erreur d\'évaluation:', e);
-            return '#ERREUR';
+            console.error('Erreur d\'évaluation finale:', e);
+            return '#CALC!';
         }
+    }
+
+    // --- Helper functions for async formula evaluation ---
+    async function replaceAsync(str, regex, asyncFn) {
+        const promises = [];
+        str.replace(regex, (match, ...args) => {
+            const promise = asyncFn(match, ...args);
+            promises.push(promise);
+        });
+        const data = await Promise.all(promises);
+        return str.replace(regex, () => data.shift());
+    }
+
+    function getMatchingBracket(str, start) {
+        let balance = 1;
+        for (let i = start; i < str.length; i++) {
+            if (str[i] === '(') balance++;
+            if (str[i] === ')') balance--;
+            if (balance === 0) return str.substring(start, i);
+        }
+        return ''; // Should not happen with valid formulas
+    }
+
+    function splitArgs(argsString) {
+        const args = [];
+        let balance = 0;
+        let currentArg = '';
+        for (let i = 0; i < argsString.length; i++) {
+            const char = argsString[i];
+            if (char === '(') balance++;
+            if (char === ')') balance--;
+            if (char === ';' && balance === 0) {
+                args.push(currentArg.trim());
+                currentArg = '';
+            } else {
+                currentArg += char;
+            }
+        }
+        if (currentArg) {
+            args.push(currentArg.trim());
+        }
+        return args;
     }
 
     function moveToNextCell(direction) {
@@ -1182,6 +1062,15 @@ return args[0];
         }
     }
 
+    /**
+     * Crée ou met à jour un graphique Chart.js sur un canevas donné.
+     * @param {HTMLCanvasElement} canvas - Le canevas sur lequel dessiner le graphique.
+     * @param {string} type - Le type de graphique (ex: 'bar', 'line').
+     * @param {string} title - Le titre du graphique.
+     * @param {string} dataRange - La plage de cellules contenant les données (ex: 'A1:B10').
+     * @param {boolean} showLabels - Indique si les étiquettes doivent être affichées.
+     * @param {string} colorScheme - Le schéma de couleurs à utiliser pour le graphique.
+     */
     function createChart(canvas, type, title, dataRange, showLabels, colorScheme) {
         const [start, end] = dataRange.split(':');
         const startMatch = start.match(/([A-Z]+)([0-9]+)/);
@@ -2416,6 +2305,9 @@ function NOUVELLE_FONCTION(...args) {
         }
     }
 
+    /**
+     * Rassemble toutes les données du tableur (cellules, éléments, graphiques) et les envoie au backend pour sauvegarde.
+     */
     async function saveSpreadsheet() {
                 const spreadsheetName = document.getElementById('spreadsheet-container').dataset.spreadsheetName;
                 if (!spreadsheetName) {
@@ -2536,14 +2428,31 @@ function NOUVELLE_FONCTION(...args) {
         }
     }
 
+    async function recalculateAllFormulas() {
+        const formulaCells = Array.from(document.querySelectorAll('.cell[data-formula]'));
+        for (const cell of formulaCells) {
+            try {
+                const formula = cell.dataset.formula;
+                const result = await evaluateFormula(formula.substring(1), new Set([cell.dataset.coords]));
+                cell.textContent = result;
+            } catch (e) {
+                cell.textContent = e.message.startsWith('#') ? e.message : '#ERREUR_RECALC';
+                console.error(`Erreur lors du recalcul de ${cell.dataset.coords}:`, e);
+            }
+        }
+    }
+
+    /**
+     * Charge les données du tableur actuel depuis le backend et les affiche.
+     */
     async function loadSpreadsheet() {
         try {
-            const response = await fetch(`${CODE_SERVER_URL}/api/spreadsheet/load/default`);
+            const spreadsheetName = document.getElementById('spreadsheet-container').dataset.spreadsheetName;
+            const response = await fetch(`/api/spreadsheets/${spreadsheetName}`);
 
             if (!response.ok) {
                 if (response.status === 404) {
-                    console.log('Aucun tableur sauvegardé trouvé. Initialisation d\'une feuille vierge.');
-                    // Pas besoin d'appeler initExampleData, la feuille est déjà vierge.
+                    console.log('Tableur non trouvé. Feuille vierge initialisée.');
                 } else {
                     throw new Error(`Erreur serveur: ${response.status}`);
                 }
@@ -2552,17 +2461,19 @@ function NOUVELLE_FONCTION(...args) {
 
             const data = await response.json();
             renderSpreadsheet(data);
-
-            console.log('Tableur chargé depuis la base de données.');
+            console.log(`Tableur '${spreadsheetName}' chargé.`);
 
         } catch (e) {
-            console.error('Erreur lors du chargement du tableur depuis la base de données:', e);
-            alert('Impossible de charger les données du tableur. Une feuille vierge sera utilisée.');
+            console.error('Erreur lors du chargement du tableur:', e);
+            alert('Impossible de charger les données du tableur.');
         }
     }
 
+    /**
+     * Affiche les données d'un tableur (cellules, éléments, graphiques) sur la grille.
+     * @param {object} data - L'objet contenant les données du tableur.
+     */
     function renderSpreadsheet(data) {
-        // 1. Réinitialiser la feuille de calcul
         resetSpreadsheet();
 
         // 2. Rendre les cellules
@@ -2992,6 +2903,10 @@ function NOUVELLE_FONCTION(...args) {
     }
 
 
+    /**
+     * Exporte un élément DOM (généralement le conteneur du tableur ou un rapport) en PDF.
+     * @param {string} [targetSelector='.spreadsheet-container'] - Le sélecteur CSS de l'élément à exporter.
+     */
     function exportToPDF(targetSelector = '.spreadsheet-container') {
         const { jsPDF } = window.jspdf;
         const targetElement = document.querySelector(targetSelector);
